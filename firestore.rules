@@ -1,52 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // ============================================
-    // HELPER FUNCTIONS
+    // AUTH HELPERS (Custom Claims - FAST)
     // ============================================
     
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    function isAllowedDomain() {
-      return request.auth.token.email.matches('.*@dadeschools[.]net$') ||
-             request.auth.token.email in ['synapsecopilot@gmail.com'];
+
+    // Custom claims from Firebase Auth token (set via Cloud Functions)
+    function role() {
+      return request.auth.token.role; // 'superadmin' | 'admin' | 'teacher' | 'monitor' | 'kiosk'
     }
-    
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+
+    function claimSchool() {
+      return request.auth.token.school_id; // e.g., 'SCHOOL123'
     }
-    
+
+    // SuperAdmin bypasses domain restriction
     function isSuperAdmin() {
-      return isSignedIn() && getUserData().role == 'SUPER_ADMIN';
+      return isSignedIn() && role() == 'superadmin';
     }
-    
-    function isSchoolAdmin(schoolId) {
-      let userData = getUserData();
-      return userData.role in ['SUPER_ADMIN', 'SCHOOL_ADMIN'] && 
-             (userData.school_id == schoolId || userData.role == 'SUPER_ADMIN');
+
+    // Domain restriction (except SuperAdmin)
+    function domainAllowed() {
+      return isSignedIn() && (
+        request.auth.token.email.matches('.*@dadeschools[.]net$') ||
+        request.auth.token.email == 'synapsecopilot@gmail.com'
+      );
     }
-    
-    function isSchoolMember(schoolId) {
-      let userData = getUserData();
-      return userData.school_id == schoolId || userData.role == 'SUPER_ADMIN';
+
+    // Trusted = SuperAdmin OR on allowed domain
+    function isTrustedUser() {
+      return isSuperAdmin() || domainAllowed();
     }
-    
-    function isTeacherOrAbove(schoolId) {
-      let userData = getUserData();
-      return userData.role in ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER'] &&
-             (userData.school_id == schoolId || userData.role == 'SUPER_ADMIN');
+
+    function isAdmin() {
+      return isTrustedUser() && (role() == 'admin' || isSuperAdmin());
     }
-    
-    function isHallMonitorOrAbove(schoolId) {
-      let userData = getUserData();
-      return userData.role in ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'HALL_MONITOR'] &&
-             (userData.school_id == schoolId || userData.role == 'SUPER_ADMIN');
+
+    function isTeacher() {
+      return isTrustedUser() && (role() in ['teacher', 'admin'] || isSuperAdmin());
     }
+
+    function isMonitor() {
+      return isTrustedUser() && (role() in ['monitor', 'teacher', 'admin'] || isSuperAdmin());
+    }
+
+    function canAccessSchool(schoolId) {
+      return isSuperAdmin() || (isTrustedUser() && claimSchool() == schoolId);
+    }
+
+    // ============================================
+    // VALIDATION HELPERS
+    // ============================================
     
-    // Validation helpers
     function isValidString(field, minLen, maxLen) {
       return field is string && field.size() >= minLen && field.size() <= maxLen;
     }
@@ -63,10 +73,6 @@ service cloud.firestore {
       return status in ['IN', 'OUT'];
     }
     
-    function isValidPassStatus(status) {
-      return status in ['ACTIVE', 'ENDED'];
-    }
-    
     function isValidLogType(type) {
       return type in ['PASS', 'RETURN', 'INFRACTION', 'INCENTIVE', 'TARDY'];
     }
@@ -74,161 +80,162 @@ service cloud.firestore {
     function isValidPriority(priority) {
       return priority in ['normal', 'important', 'urgent'];
     }
-    
+
     // ============================================
-    // USERS COLLECTION
+    // USERS COLLECTION (Global)
     // ============================================
     
-    match /users/{userId} {
-      // Users can read their own document
-      // SuperAdmins can read all users
-      // School Admins can read users in their school
-      allow read: if isSignedIn() && (
-        request.auth.uid == userId || 
+    match /users/{uid} {
+      // Read own doc, SuperAdmin reads all, Admin reads same-school users
+      allow read: if isTrustedUser() && (
+        request.auth.uid == uid || 
         isSuperAdmin() ||
-        (getUserData().role == 'SCHOOL_ADMIN' && resource.data.school_id == getUserData().school_id)
+        (isAdmin() && resource.data.school_id == claimSchool())
       );
       
-      // Allow listing users in the same school (for staff lists)
-      allow list: if isSignedIn() && (
-        isSuperAdmin() ||
-        (getUserData().role == 'SCHOOL_ADMIN')
-      );
-      
-      // Users can create their own document on first login
+      // Create own doc on first login (must be on allowed domain)
       allow create: if isSignedIn() && 
-                       request.auth.uid == userId && 
-                       isAllowedDomain() &&
-                       request.resource.data.role == 'TEACHER' &&
+                       request.auth.uid == uid && 
+                       domainAllowed() &&
                        isValidEmail(request.resource.data.email) &&
                        request.resource.data.email == request.auth.token.email;
       
-      // Users can update their own non-sensitive fields
-      allow update: if isSignedIn() && 
-                       request.auth.uid == userId &&
+      // Update own doc (except role/email)
+      allow update: if isTrustedUser() && 
+                       request.auth.uid == uid &&
                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'email']);
       
-      // SuperAdmins can update any user including roles
-      // School Admins can promote users in their school (but not to SuperAdmin)
+      // SuperAdmin can update anyone; Admin can promote within school (not to superadmin)
       allow update: if isSuperAdmin() ||
-                       (getUserData().role == 'SCHOOL_ADMIN' && 
-                        resource.data.school_id == getUserData().school_id &&
-                        request.resource.data.role != 'SUPER_ADMIN');
+                       (isAdmin() && 
+                        resource.data.school_id == claimSchool() &&
+                        request.resource.data.role != 'superadmin');
       
-      // No deletes allowed
       allow delete: if false;
     }
-    
+
     // ============================================
-    // SCHOOLS COLLECTION
+    // SCHOOLS COLLECTION (Tenant Root)
     // ============================================
     
     match /schools/{schoolId} {
-      // Anyone authenticated can read school basic info
-      allow read: if isSignedIn() && isAllowedDomain();
-      
-      // Only SuperAdmins can create schools
-      allow create: if isSuperAdmin();
-      
-      // School admins can update their school
-      allow update: if isSchoolAdmin(schoolId);
-      
-      // Only SuperAdmins can delete schools
-      allow delete: if isSuperAdmin();
-      
+      allow read: if canAccessSchool(schoolId);
+      allow create, delete: if isSuperAdmin();
+      allow update: if isAdmin() && canAccessSchool(schoolId);
+
       // ----------------------------------------
-      // STUDENTS SUBCOLLECTION
+      // STUDENTS
       // ----------------------------------------
       match /students/{studentId} {
-        allow read: if isSchoolMember(schoolId);
-        allow create: if isSchoolAdmin(schoolId);
-        allow update: if isTeacherOrAbove(schoolId);
-        allow delete: if isSchoolAdmin(schoolId);
+        allow read: if canAccessSchool(schoolId);
+        allow create, delete: if isAdmin() && canAccessSchool(schoolId);
+        allow update: if isTeacher() && canAccessSchool(schoolId);
       }
-      
+
       // ----------------------------------------
-      // ACTIVE PASSES SUBCOLLECTION
+      // ACTIVE PASSES
       // ----------------------------------------
       match /active_passes/{passId} {
-        allow read: if isSchoolMember(schoolId);
-        allow create: if isTeacherOrAbove(schoolId);
-        allow update: if isTeacherOrAbove(schoolId);
-        allow delete: if isSchoolAdmin(schoolId);
+        allow read: if canAccessSchool(schoolId);
+        allow create, update: if isTeacher() && canAccessSchool(schoolId);
+        allow delete: if isTeacher() && canAccessSchool(schoolId); // Return = delete
       }
-      
+
       // ----------------------------------------
-      // LOGS SUBCOLLECTION (Immutable Audit Trail)
+      // LOGS (Immutable Audit Trail)
       // ----------------------------------------
       match /logs/{logId} {
-        allow read: if isSchoolMember(schoolId);
-        allow create: if isTeacherOrAbove(schoolId);
-        // Logs are immutable - no updates or deletes
-        allow update, delete: if false;
+        allow read: if canAccessSchool(schoolId);
+        allow create: if isTeacher() && canAccessSchool(schoolId) &&
+                         isValidLogType(request.resource.data.type);
+        allow update: if false; // Immutable
+        allow delete: if isSuperAdmin(); // Emergency only
       }
-      
+
       // ----------------------------------------
-      // HOUSES SUBCOLLECTION
+      // HOUSES
       // ----------------------------------------
       match /houses/{houseId} {
-        allow read: if isSchoolMember(schoolId);
-        allow write: if isSchoolAdmin(schoolId);
-        // Teachers can update scores only
-        allow update: if isTeacherOrAbove(schoolId) &&
+        allow read: if canAccessSchool(schoolId);
+        allow create, delete: if isAdmin() && canAccessSchool(schoolId);
+        // Teachers can only update score field
+        allow update: if isTeacher() && canAccessSchool(schoolId) &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['score']);
+        // Admins can update anything
+        allow update: if isAdmin() && canAccessSchool(schoolId);
       }
-      
+
       // ----------------------------------------
       // CONFLICT GROUPS
       // ----------------------------------------
       match /conflictGroups/{groupId} {
-        allow read: if isSchoolMember(schoolId);
-        allow write: if isSchoolAdmin(schoolId);
+        allow read: if canAccessSchool(schoolId);
+        allow write: if isAdmin() && canAccessSchool(schoolId);
       }
-      
+
       // ----------------------------------------
       // SCHOOL CONFIGS
       // ----------------------------------------
       match /school_configs/{configId} {
-        allow read: if isSchoolMember(schoolId);
-        allow write: if isSchoolAdmin(schoolId);
+        allow read: if canAccessSchool(schoolId);
+        allow write: if isAdmin() && canAccessSchool(schoolId);
       }
-      
+
       // ----------------------------------------
-      // BOX QUEUE (Admin Approvals)
+      // BOX QUEUE (Approval Requests)
       // ----------------------------------------
       match /box_queue/{itemId} {
-        allow read: if isSchoolAdmin(schoolId);
-        allow create: if isTeacherOrAbove(schoolId);
-        allow update: if isSchoolAdmin(schoolId);
-        allow delete: if isSchoolAdmin(schoolId);
+        allow read: if isAdmin() && canAccessSchool(schoolId);
+        allow create: if isTeacher() && canAccessSchool(schoolId);
+        allow update, delete: if isAdmin() && canAccessSchool(schoolId);
       }
-      
+
       // ----------------------------------------
       // WAITLIST
       // ----------------------------------------
       match /waitlist/{itemId} {
-        allow read: if isSchoolMember(schoolId);
-        allow write: if isTeacherOrAbove(schoolId);
+        allow read: if canAccessSchool(schoolId);
+        allow write: if isTeacher() && canAccessSchool(schoolId);
       }
-      
+
       // ----------------------------------------
       // BROADCASTS
       // ----------------------------------------
       match /broadcasts/{broadcastId} {
-        allow read: if isSchoolMember(schoolId);
-        allow create: if isSchoolAdmin(schoolId);
-        allow update: if isSchoolAdmin(schoolId);
-        allow delete: if isSchoolAdmin(schoolId);
+        allow read: if canAccessSchool(schoolId);
+        allow create: if isAdmin() && canAccessSchool(schoolId) &&
+                         isValidPriority(request.resource.data.priority);
+        allow update, delete: if isAdmin() && canAccessSchool(schoolId);
       }
-      
+
       // ----------------------------------------
-      // PARENT CONTACTS
+      // PARENT CONTACTS (Immutable)
       // ----------------------------------------
       match /parentContacts/{contactId} {
-        allow read: if isSchoolMember(schoolId);
-        allow create: if isTeacherOrAbove(schoolId);
-        allow update, delete: if false; // Immutable records
+        allow read: if canAccessSchool(schoolId);
+        allow create: if isTeacher() && canAccessSchool(schoolId);
+        allow update, delete: if false; // Immutable audit trail
       }
+    }
+
+    // ============================================
+    // OPTIONAL GLOBAL COLLECTIONS
+    // ============================================
+    
+    match /consent_logs/{id} {
+      allow create: if isTrustedUser();
+      allow read, update, delete: if false;
+    }
+
+    match /wellness_logs/{id} {
+      allow create: if isTeacher();
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /sub_codes/{id} {
+      allow read: if isTrustedUser();
+      allow write: if isSuperAdmin();
     }
   }
 }
