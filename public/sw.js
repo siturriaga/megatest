@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stride-v2.2';
+const CACHE_NAME = 'stride-v2.3';
 const STATIC_ASSETS = [
   '/',
   '/dashboard',
@@ -45,12 +45,16 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Skip Firebase/API requests - always go to network
+  // Skip Firebase/Google/API requests - always go to network (don't intercept)
   if (
     url.hostname.includes('firebaseio.com') ||
     url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('google.com') ||
+    url.hostname.includes('gstatic.com') ||
     url.hostname.includes('firebase') ||
-    url.pathname.startsWith('/api/')
+    url.hostname.includes('accounts.google') ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname.includes('__/auth/')
   ) {
     return;
   }
