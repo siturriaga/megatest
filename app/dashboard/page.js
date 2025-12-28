@@ -2,7 +2,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { LogOut, Zap, Shield, ScanLine, Monitor, ToggleLeft, ToggleRight, Camera, Globe, Building } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useStrideState } from '../../../hooks/useStrideState';
+// ✅ FIXED: Corrected import path from three levels up (../../../) to two levels up (../../)
+import { useStrideState } from '../../hooks/useStrideState';
 import StrideBot from './components/StrideBot';
 import HallPassPanel from './components/HallPassPanel';
 import InfractionsPanel from './components/InfractionsPanel';
