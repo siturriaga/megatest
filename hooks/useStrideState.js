@@ -11,7 +11,7 @@ import { sanitizeText, sanitizeStudentName, isAllowedDomain, rateLimiters } from
 import { validatePass, validateLogEntry, validateBroadcast, validateConflictGroup, validateParentContact, validateSchool, validateConfig } from '../utils/validators';
 
 const ALLOWED_DOMAIN = 'dadeschools.net';
-const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || 'synapsecopilot@gmail.com';
+const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || null;
 
 export function useStrideState(router, botRef, setToast, user, setUser) {
   // Auth & User State
