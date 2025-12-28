@@ -271,8 +271,9 @@ export function validateSchool(school) {
     if (sanitized.name.length < 2) {
       errors.push('School name must be at least 2 characters');
     }
-    // Validate no special characters that could cause issues
-    if (!/^[a-zA-Z0-9\s\-'.]+$/.test(sanitized.name)) {
+    // Allow letters (including accented), numbers, spaces, hyphens, apostrophes, periods
+    // Unicode letter property \p{L} matches any letter in any language
+    if (!/^[\p{L}\p{N}\s\-'.]+$/u.test(sanitized.name)) {
       errors.push('School name contains invalid characters');
     }
   }
@@ -314,16 +315,20 @@ export function validateConfig(configType, data) {
       const studentRatio = parseFloat(data.studentPointRatio);
       const teamRatio = parseFloat(data.teamPointRatio);
       
-      if (isNaN(studentRatio) || studentRatio < 0 || studentRatio > 1) {
+      // Allow 0 as a valid value (don't use || fallback which treats 0 as falsy)
+      const validStudentRatio = !isNaN(studentRatio) && studentRatio >= 0 && studentRatio <= 1;
+      const validTeamRatio = !isNaN(teamRatio) && teamRatio >= 0 && teamRatio <= 1;
+      
+      if (!validStudentRatio) {
         errors.push('Student point ratio must be between 0 and 1');
       }
-      if (isNaN(teamRatio) || teamRatio < 0 || teamRatio > 1) {
+      if (!validTeamRatio) {
         errors.push('Team point ratio must be between 0 and 1');
       }
       
       sanitized = {
-        studentPointRatio: Math.max(0, Math.min(1, studentRatio || 0.4)),
-        teamPointRatio: Math.max(0, Math.min(1, teamRatio || 0.6))
+        studentPointRatio: validStudentRatio ? studentRatio : 0.4,
+        teamPointRatio: validTeamRatio ? teamRatio : 0.6
       };
       break;
 
