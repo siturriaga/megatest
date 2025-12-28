@@ -66,7 +66,7 @@ export default function LoginPage() {
               S
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight">STRIDE</h1>
+              <h1 className="text-2xl font-black tracking-tight">Synapse Copilot: Bridging the Gaps in Education</h1>
               <p className="text-xs text-white/40 font-medium">School Management System</p>
             </div>
           </div>
