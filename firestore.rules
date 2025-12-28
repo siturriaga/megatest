@@ -1,0 +1,234 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isAllowedDomain() {
+      return request.auth.token.email.matches('.*@dadeschools[.]net$') ||
+             request.auth.token.email in ['synapsecopilot@gmail.com'];
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isSuperAdmin() {
+      return isSignedIn() && getUserData().role == 'SUPER_ADMIN';
+    }
+    
+    function isSchoolAdmin(schoolId) {
+      let userData = getUserData();
+      return userData.role in ['SUPER_ADMIN', 'SCHOOL_ADMIN'] && 
+             (userData.school_id == schoolId || userData.role == 'SUPER_ADMIN');
+    }
+    
+    function isSchoolMember(schoolId) {
+      let userData = getUserData();
+      return userData.school_id == schoolId || userData.role == 'SUPER_ADMIN';
+    }
+    
+    function isTeacherOrAbove(schoolId) {
+      let userData = getUserData();
+      return userData.role in ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER'] &&
+             (userData.school_id == schoolId || userData.role == 'SUPER_ADMIN');
+    }
+    
+    function isHallMonitorOrAbove(schoolId) {
+      let userData = getUserData();
+      return userData.role in ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'HALL_MONITOR'] &&
+             (userData.school_id == schoolId || userData.role == 'SUPER_ADMIN');
+    }
+    
+    // Validation helpers
+    function isValidString(field, minLen, maxLen) {
+      return field is string && field.size() >= minLen && field.size() <= maxLen;
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches('.*@.*[.].*');
+    }
+    
+    function isValidGrade(grade) {
+      return grade is int && grade >= 1 && grade <= 12;
+    }
+    
+    function isValidStatus(status) {
+      return status in ['IN', 'OUT'];
+    }
+    
+    function isValidPassStatus(status) {
+      return status in ['ACTIVE', 'ENDED'];
+    }
+    
+    function isValidLogType(type) {
+      return type in ['PASS', 'RETURN', 'INFRACTION', 'INCENTIVE', 'TARDY'];
+    }
+    
+    function isValidPriority(priority) {
+      return priority in ['normal', 'important', 'urgent'];
+    }
+    
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+    
+    match /users/{userId} {
+      // Users can read their own document
+      // SuperAdmins can read all users
+      // School Admins can read users in their school
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId || 
+        isSuperAdmin() ||
+        (getUserData().role == 'SCHOOL_ADMIN' && resource.data.school_id == getUserData().school_id)
+      );
+      
+      // Allow listing users in the same school (for staff lists)
+      allow list: if isSignedIn() && (
+        isSuperAdmin() ||
+        (getUserData().role == 'SCHOOL_ADMIN')
+      );
+      
+      // Users can create their own document on first login
+      allow create: if isSignedIn() && 
+                       request.auth.uid == userId && 
+                       isAllowedDomain() &&
+                       request.resource.data.role == 'TEACHER' &&
+                       isValidEmail(request.resource.data.email) &&
+                       request.resource.data.email == request.auth.token.email;
+      
+      // Users can update their own non-sensitive fields
+      allow update: if isSignedIn() && 
+                       request.auth.uid == userId &&
+                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'email']);
+      
+      // SuperAdmins can update any user including roles
+      // School Admins can promote users in their school (but not to SuperAdmin)
+      allow update: if isSuperAdmin() ||
+                       (getUserData().role == 'SCHOOL_ADMIN' && 
+                        resource.data.school_id == getUserData().school_id &&
+                        request.resource.data.role != 'SUPER_ADMIN');
+      
+      // No deletes allowed
+      allow delete: if false;
+    }
+    
+    // ============================================
+    // SCHOOLS COLLECTION
+    // ============================================
+    
+    match /schools/{schoolId} {
+      // Anyone authenticated can read school basic info
+      allow read: if isSignedIn() && isAllowedDomain();
+      
+      // Only SuperAdmins can create schools
+      allow create: if isSuperAdmin();
+      
+      // School admins can update their school
+      allow update: if isSchoolAdmin(schoolId);
+      
+      // Only SuperAdmins can delete schools
+      allow delete: if isSuperAdmin();
+      
+      // ----------------------------------------
+      // STUDENTS SUBCOLLECTION
+      // ----------------------------------------
+      match /students/{studentId} {
+        allow read: if isSchoolMember(schoolId);
+        allow create: if isSchoolAdmin(schoolId);
+        allow update: if isTeacherOrAbove(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+      
+      // ----------------------------------------
+      // ACTIVE PASSES SUBCOLLECTION
+      // ----------------------------------------
+      match /active_passes/{passId} {
+        allow read: if isSchoolMember(schoolId);
+        allow create: if isTeacherOrAbove(schoolId);
+        allow update: if isTeacherOrAbove(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+      
+      // ----------------------------------------
+      // LOGS SUBCOLLECTION (Immutable Audit Trail)
+      // ----------------------------------------
+      match /logs/{logId} {
+        allow read: if isSchoolMember(schoolId);
+        allow create: if isTeacherOrAbove(schoolId);
+        // Logs are immutable - no updates or deletes
+        allow update, delete: if false;
+      }
+      
+      // ----------------------------------------
+      // HOUSES SUBCOLLECTION
+      // ----------------------------------------
+      match /houses/{houseId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isSchoolAdmin(schoolId);
+        // Teachers can update scores only
+        allow update: if isTeacherOrAbove(schoolId) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['score']);
+      }
+      
+      // ----------------------------------------
+      // CONFLICT GROUPS
+      // ----------------------------------------
+      match /conflictGroups/{groupId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isSchoolAdmin(schoolId);
+      }
+      
+      // ----------------------------------------
+      // SCHOOL CONFIGS
+      // ----------------------------------------
+      match /school_configs/{configId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isSchoolAdmin(schoolId);
+      }
+      
+      // ----------------------------------------
+      // BOX QUEUE (Admin Approvals)
+      // ----------------------------------------
+      match /box_queue/{itemId} {
+        allow read: if isSchoolAdmin(schoolId);
+        allow create: if isTeacherOrAbove(schoolId);
+        allow update: if isSchoolAdmin(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+      
+      // ----------------------------------------
+      // WAITLIST
+      // ----------------------------------------
+      match /waitlist/{itemId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isTeacherOrAbove(schoolId);
+      }
+      
+      // ----------------------------------------
+      // BROADCASTS
+      // ----------------------------------------
+      match /broadcasts/{broadcastId} {
+        allow read: if isSchoolMember(schoolId);
+        allow create: if isSchoolAdmin(schoolId);
+        allow update: if isSchoolAdmin(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+      
+      // ----------------------------------------
+      // PARENT CONTACTS
+      // ----------------------------------------
+      match /parentContacts/{contactId} {
+        allow read: if isSchoolMember(schoolId);
+        allow create: if isTeacherOrAbove(schoolId);
+        allow update, delete: if false; // Immutable records
+      }
+    }
+  }
+}
