@@ -1,1195 +1,699 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { auth, db } from '../app/firebase';
-import { onAuthStateChanged, signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, onSnapshot, addDoc, deleteDoc, getDocs, orderBy, limit, serverTimestamp, writeBatch, increment, runTransaction } from 'firebase/firestore';
-import { COLLECTIONS, SCHOOL_SUBCOLLECTIONS, CONFIG_DOCS, studentsPath, logsPath, activePassesPath, housesPath, conflictGroupsPath, configPath, boxQueuePath, waitlistPath, broadcastsPath, parentContactsPath } from '../constants/collections';
-import { ROLES, isAdminOrAbove, isSuperAdmin as checkSuperAdmin } from '../constants/roles';
-import { DEFAULT_ECONOMY, DEFAULT_BELL_SCHEDULE, DEFAULT_KIOSK, DEFAULT_SETTINGS, DEFAULT_HOUSES, DEFAULT_INFRACTION_LABELS, DEFAULT_INCENTIVE_LABELS, DEFAULT_PASS_DESTINATIONS, getEstimatedDuration, getMTSSTier } from '../constants/defaults';
-import { SANDBOX_STUDENTS, SANDBOX_HOUSES, SANDBOX_LOGS, SANDBOX_CONFIG } from '../config/sandbox';
-import { sanitizeText, sanitizeStudentName, isAllowedDomain, rateLimiters } from '../utils/sanitize';
-import { validatePass, validateLogEntry, validateBroadcast, validateConflictGroup, validateParentContact, validateSchool, validateConfig } from '../utils/validators';
+import { useState, useRef } from 'react';
+import { X, Upload, Save, Plus, Trash2, Settings, Clock, DollarSign, Home, Tag, Users, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
-const ALLOWED_DOMAIN = 'dadeschools.net';
-const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || null;
+// ✅ FIXED: Correct Import Paths (Going up 3 levels to root)
+import { 
+  DEFAULT_INFRACTION_LABELS, 
+  DEFAULT_INCENTIVE_LABELS, 
+  DEFAULT_PASS_DESTINATIONS,
+  DEFAULT_BELL_SCHEDULE,
+  DEFAULT_ECONOMY,
+  DEFAULT_HOUSES,
+  DEFAULT_SETTINGS
+} from '../../../constants/defaults';
 
-export function useStrideState(router, botRef, setToast, user, setUser) {
-  // Auth & User State
-  const [userData, setUserData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showSchoolPrompt, setShowSchoolPrompt] = useState(false);
+export default function AdminPanel({
+  onClose,
+  labelsConfig,
+  bellSchedule,
+  economyConfig,
+  housesConfig,
+  settingsConfig,
+  houses,
+  allStudents,
+  onUpdateConfig,
+  onUpdateHouses,
+  onHandleFileUpload,
+  isSchoolAdmin,
+  isSuperAdmin,
+  theme,
+}) {
+  const [activeTab, setActiveTab] = useState('labels');
+  const [isSaving, setIsSaving] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState(null);
+  const fileInputRef = useRef(null);
 
-  // School State
-  const [currentSchoolId, setCurrentSchoolId] = useState(null);
-  const [schoolData, setSchoolData] = useState(null);
-  const [allSchools, setAllSchools] = useState([]);
-
-  // UI State
-  const [activeTab, setActiveTab] = useState('hallpass');
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [theme, setTheme] = useState('obsidian');
-
-  // Data State
-  const [allStudents, setAllStudents] = useState([]);
-  const [activePasses, setActivePasses] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [houses, setHouses] = useState([]);
-  const [conflictGroups, setConflictGroups] = useState([]);
-  const [boxQueue, setBoxQueue] = useState([]);
-  const [waitlist, setWaitlist] = useState([]);
-  const [broadcasts, setBroadcasts] = useState([]);
-  const [parentContacts, setParentContacts] = useState([]);
-
-  // Config State
-  const [labelsConfig, setLabelsConfig] = useState({
-    infractionButtons: DEFAULT_INFRACTION_LABELS,
-    incentiveButtons: DEFAULT_INCENTIVE_LABELS,
-    passDestinations: DEFAULT_PASS_DESTINATIONS,
-    maxDisplayedDestinations: 8,
+  // Local state for editing
+  const [localLabels, setLocalLabels] = useState({
+    infractionButtons: labelsConfig?.infractionButtons || DEFAULT_INFRACTION_LABELS,
+    incentiveButtons: labelsConfig?.incentiveButtons || DEFAULT_INCENTIVE_LABELS,
+    passDestinations: labelsConfig?.passDestinations || DEFAULT_PASS_DESTINATIONS,
+    maxDisplayedDestinations: labelsConfig?.maxDisplayedDestinations || 8,
   });
-  const [bellSchedule, setBellSchedule] = useState(DEFAULT_BELL_SCHEDULE);
-  const [economyConfig, setEconomyConfig] = useState(DEFAULT_ECONOMY);
-  const [kioskConfig, setKioskConfig] = useState(DEFAULT_KIOSK);
-  const [settingsConfig, setSettingsConfig] = useState(DEFAULT_SETTINGS);
-  const [housesConfig, setHousesConfig] = useState({ houses: DEFAULT_HOUSES });
 
-  // Safety State
-  const [lockdown, setLockdown] = useState(false);
-  const [lockdownMeta, setLockdownMeta] = useState(null);
+  const [localBellSchedule, setLocalBellSchedule] = useState({
+    periods: bellSchedule?.periods || DEFAULT_BELL_SCHEDULE.periods,
+    passingTime: bellSchedule?.passingTime || DEFAULT_BELL_SCHEDULE.passingTime,
+    gracePeriodMinutes: bellSchedule?.gracePeriodMinutes || DEFAULT_BELL_SCHEDULE.gracePeriodMinutes,
+  });
 
-  // Sandbox State
-  const [sandboxMode, setSandboxMode] = useState(false);
-  const [sandboxStudents, setSandboxStudents] = useState([...SANDBOX_STUDENTS]);
-  const [sandboxPasses, setSandboxPasses] = useState([]);
-  const [sandboxLogs, setSandboxLogs] = useState([...SANDBOX_LOGS]);
-  const [sandboxHouses, setSandboxHouses] = useState([...SANDBOX_HOUSES]);
+  const [localEconomy, setLocalEconomy] = useState({
+    studentPointRatio: economyConfig?.studentPointRatio || DEFAULT_ECONOMY.studentPointRatio,
+    teamPointRatio: economyConfig?.teamPointRatio || DEFAULT_ECONOMY.teamPointRatio,
+  });
 
-  // Unsubscribe refs
-  const unsubscribesRef = useRef([]);
+  const [localSettings, setLocalSettings] = useState({
+    passOvertimeMinutes: settingsConfig?.passOvertimeMinutes || DEFAULT_SETTINGS.passOvertimeMinutes,
+    maxCapacityPerDestination: settingsConfig?.maxCapacityPerDestination || DEFAULT_SETTINGS.maxCapacityPerDestination,
+    conflictAlertsEnabled: settingsConfig?.conflictAlertsEnabled !== false,
+    tardyStreakThreshold: settingsConfig?.tardyStreakThreshold || DEFAULT_SETTINGS.tardyStreakThreshold,
+  });
 
-  // Derived state
-  const isSuperAdmin = userData?.role === ROLES.SUPER_ADMIN || user?.email === SUPER_ADMIN_EMAIL;
-  const isSchoolAdmin = userData?.role === ROLES.SCHOOL_ADMIN || isSuperAdmin;
-  const employeeId = userData?.employee_id || user?.email?.split('@')[0]?.toUpperCase() || 'UNKNOWN';
-  
-  const userGreeting = {
-    firstName: user?.displayName?.split(' ')[0] || 'Teacher',
-    fullName: user?.displayName || 'Teacher',
-    email: user?.email || '',
-  };
+  const [localHouses, setLocalHouses] = useState(
+    houses?.length > 0 ? houses : [
+      { id: 'phoenix', name: 'Phoenix', mascot: '🔥', color: '#ef4444', score: 0 },
+      { id: 'wolf', name: 'Wolf', mascot: '🐺', color: '#3b82f6', score: 0 },
+      { id: 'hawk', name: 'Hawk', mascot: '🦅', color: '#22c55e', score: 0 },
+      { id: 'panther', name: 'Panther', mascot: '🐆', color: '#a855f7', score: 0 },
+    ]
+  );
 
-  const displaySchoolName = sandboxMode ? 'Sandbox Training' : (schoolData?.name || currentSchoolId || 'No School');
-
-  // Theme effect
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('stride-theme', theme);
-  }, [theme]);
-
-  // Load theme from localStorage
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('stride-theme');
-    if (savedTheme) setTheme(savedTheme);
-  }, []);
-
-  // Auth listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const email = firebaseUser.email || '';
-        const domain = email.split('@')[1];
-        
-        // Domain restriction
-        if (domain !== ALLOWED_DOMAIN && email !== SUPER_ADMIN_EMAIL) {
-          await signOut(auth);
-          setToast?.({ message: 'Access restricted to @dadeschools.net accounts', type: 'error' });
-          setIsLoading(false);
-          return;
-        }
-
-        setUser(firebaseUser);
-        
-        // Fetch or create user document
-        const userRef = doc(db, COLLECTIONS.USERS, firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setUserData(data);
-          
-          // Auto-assign SuperAdmin role
-          if (email === SUPER_ADMIN_EMAIL && data.role !== ROLES.SUPER_ADMIN) {
-            await updateDoc(userRef, { role: ROLES.SUPER_ADMIN });
-            setUserData({ ...data, role: ROLES.SUPER_ADMIN });
-          }
-          
-          // Check for existing school
-          if (data.school_id) {
-            setCurrentSchoolId(data.school_id);
-          } else if (email === SUPER_ADMIN_EMAIL || data.role === ROLES.SUPER_ADMIN) {
-            setCurrentSchoolId('COMMAND_CENTER');
-          } else {
-            setShowSchoolPrompt(true);
-          }
-        } else {
-          // Create new user document
-          const newUserData = {
-            email,
-            displayName: firebaseUser.displayName || '',
-            role: email === SUPER_ADMIN_EMAIL ? ROLES.SUPER_ADMIN : ROLES.TEACHER,
-            employee_id: email.split('@')[0].toUpperCase(),
-            school_id: null,
-            created_at: serverTimestamp(),
-            aup_accepted: false,
-            aup_version: null,
-          };
-          await setDoc(userRef, newUserData);
-          setUserData(newUserData);
-          
-          if (email === SUPER_ADMIN_EMAIL) {
-            setCurrentSchoolId('COMMAND_CENTER');
-          } else {
-            setShowSchoolPrompt(true);
-          }
-        }
-      } else {
-        setUser(null);
-        setUserData(null);
-        router?.push('/');
-      }
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [router, setUser, setToast]);
-
-  // Cleanup subscriptions on unmount or school change
-  const cleanupSubscriptions = useCallback(() => {
-    unsubscribesRef.current.forEach(unsub => unsub?.());
-    unsubscribesRef.current = [];
-  }, []);
-
-  // Load all schools for SuperAdmin
-  useEffect(() => {
-    if (!isSuperAdmin) return;
-    
-    const schoolsRef = collection(db, COLLECTIONS.SCHOOLS);
-    const unsub = onSnapshot(schoolsRef, (snap) => {
-      const schools = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setAllSchools(schools);
-    });
-    
-    return () => unsub();
-  }, [isSuperAdmin]);
-
-  // Main data subscription effect
-  useEffect(() => {
-    if (!currentSchoolId || currentSchoolId === 'COMMAND_CENTER') {
-      cleanupSubscriptions();
-      return;
-    }
-
-    if (currentSchoolId === 'SANDBOX') {
-      cleanupSubscriptions();
-      setSandboxMode(true);
-      setAllStudents([...SANDBOX_STUDENTS]);
-      setSandboxStudents([...SANDBOX_STUDENTS]);
-      setActivePasses([]);
-      setSandboxPasses([]);
-      setLogs([...SANDBOX_LOGS]);
-      setSandboxLogs([...SANDBOX_LOGS]);
-      setHouses([...SANDBOX_HOUSES]);
-      setSandboxHouses([...SANDBOX_HOUSES]);
-      setLabelsConfig(SANDBOX_CONFIG.labels);
-      setBellSchedule(SANDBOX_CONFIG.bell_schedule);
-      setEconomyConfig(SANDBOX_CONFIG.economy);
-      setKioskConfig(SANDBOX_CONFIG.kiosk);
-      setSettingsConfig(SANDBOX_CONFIG.settings);
-      setConflictGroups([{ id: 'conflict-1', name: 'Rival Groups', members: ['sandbox-student-3', 'sandbox-student-7'] }]);
-      setLockdown(false);
-      return;
-    }
-
-    setSandboxMode(false);
-    cleanupSubscriptions();
-
-    // Students listener
-    const studentsRef = collection(db, studentsPath(currentSchoolId));
-    const studentsUnsub = onSnapshot(studentsRef, (snap) => {
-      setAllStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    unsubscribesRef.current.push(studentsUnsub);
-
-    // Active passes listener
-    const passesRef = collection(db, activePassesPath(currentSchoolId));
-    const passesQuery = query(passesRef, where('status', '==', 'ACTIVE'));
-    const passesUnsub = onSnapshot(passesQuery, (snap) => {
-      setActivePasses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    unsubscribesRef.current.push(passesUnsub);
-
-    // Logs listener (last 200)
-    const logsRef = collection(db, logsPath(currentSchoolId));
-    const logsQuery = query(logsRef, orderBy('ts', 'desc'), limit(200));
-    const logsUnsub = onSnapshot(logsQuery, (snap) => {
-      setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    unsubscribesRef.current.push(logsUnsub);
-
-    // Houses listener
-    const housesRef = collection(db, housesPath(currentSchoolId));
-    const housesUnsub = onSnapshot(housesRef, (snap) => {
-      const h = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setHouses(h.length > 0 ? h : DEFAULT_HOUSES);
-    });
-    unsubscribesRef.current.push(housesUnsub);
-
-    // Conflict groups listener
-    const conflictsRef = collection(db, conflictGroupsPath(currentSchoolId));
-    const conflictsUnsub = onSnapshot(conflictsRef, (snap) => {
-      setConflictGroups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    unsubscribesRef.current.push(conflictsUnsub);
-
-    // Box queue listener
-    const queueRef = collection(db, boxQueuePath(currentSchoolId));
-    const queueUnsub = onSnapshot(queueRef, (snap) => {
-      setBoxQueue(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    unsubscribesRef.current.push(queueUnsub);
-
-    // Waitlist listener
-    const waitlistRef = collection(db, waitlistPath(currentSchoolId));
-    const waitlistUnsub = onSnapshot(waitlistRef, (snap) => {
-      setWaitlist(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    unsubscribesRef.current.push(waitlistUnsub);
-
-    // Broadcasts listener
-    const broadcastsRef = collection(db, broadcastsPath(currentSchoolId));
-    const broadcastsQuery = query(broadcastsRef, orderBy('ts', 'desc'), limit(50));
-    const broadcastsUnsub = onSnapshot(broadcastsQuery, (snap) => {
-      const b = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setBroadcasts(b.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)));
-    });
-    unsubscribesRef.current.push(broadcastsUnsub);
-
-    // Parent contacts listener
-    const contactsRef = collection(db, parentContactsPath(currentSchoolId));
-    const contactsQuery = query(contactsRef, orderBy('ts', 'desc'), limit(100));
-    const contactsUnsub = onSnapshot(contactsQuery, (snap) => {
-      setParentContacts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    unsubscribesRef.current.push(contactsUnsub);
-
-    // School document listener
-    const schoolRef = doc(db, COLLECTIONS.SCHOOLS, currentSchoolId);
-    const schoolUnsub = onSnapshot(schoolRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setSchoolData(data);
-        setLockdown(data.lockdown || false);
-        setLockdownMeta(data.lockdownMeta || null);
-      }
-    });
-    unsubscribesRef.current.push(schoolUnsub);
-
-    // Config listeners
-    const configDocs = [
-      { doc: CONFIG_DOCS.LABELS, setter: setLabelsConfig, default: labelsConfig },
-      { doc: CONFIG_DOCS.BELL_SCHEDULE, setter: setBellSchedule, default: DEFAULT_BELL_SCHEDULE },
-      { doc: CONFIG_DOCS.ECONOMY, setter: setEconomyConfig, default: DEFAULT_ECONOMY },
-      { doc: CONFIG_DOCS.KIOSK, setter: setKioskConfig, default: DEFAULT_KIOSK },
-      { doc: CONFIG_DOCS.SETTINGS, setter: setSettingsConfig, default: DEFAULT_SETTINGS },
-      { doc: CONFIG_DOCS.HOUSES, setter: setHousesConfig, default: { houses: DEFAULT_HOUSES } },
-    ];
-
-    configDocs.forEach(({ doc: docName, setter, default: defaultVal }) => {
-      const configRef = doc(db, configPath(currentSchoolId, docName));
-      const unsub = onSnapshot(configRef, (snap) => {
-        setter(snap.exists() ? snap.data() : defaultVal);
-      });
-      unsubscribesRef.current.push(unsub);
-    });
-
-    return () => cleanupSubscriptions();
-  }, [currentSchoolId, cleanupSubscriptions]);
-
-  // =====================
-  // HELPER FUNCTIONS
-  // =====================
-
-  const hasActivePass = useCallback((studentId) => {
-    const passes = sandboxMode ? sandboxPasses : activePasses;
-    return passes.some(p => p.studentId === studentId && p.status === 'ACTIVE');
-  }, [sandboxMode, sandboxPasses, activePasses]);
-
-  const isDestinationFull = useCallback((destination) => {
-    const passes = sandboxMode ? sandboxPasses : activePasses;
-    const maxCapacity = settingsConfig?.maxCapacityPerDestination || 5;
-    if (['Clinic', 'Office', 'Main Office', 'Student Services'].includes(destination)) return false;
-    return passes.filter(p => p.destination === destination && p.status === 'ACTIVE').length >= maxCapacity;
-  }, [sandboxMode, sandboxPasses, activePasses, settingsConfig]);
-
-  const destinationCounts = useCallback(() => {
-    const passes = sandboxMode ? sandboxPasses : activePasses;
-    const counts = {};
-    passes.forEach(p => {
-      if (p.status === 'ACTIVE') {
-        counts[p.destination] = (counts[p.destination] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [sandboxMode, sandboxPasses, activePasses]);
-
-  const getWaitlistPosition = useCallback((studentId, destination) => {
-    const filtered = waitlist.filter(w => w.destination === destination);
-    const idx = filtered.findIndex(w => w.studentId === studentId);
-    return idx >= 0 ? idx + 1 : 0;
-  }, [waitlist]);
-
-  const checkConflict = useCallback((studentId) => {
-    const passes = sandboxMode ? sandboxPasses : activePasses;
-    for (const group of conflictGroups) {
-      if (group.members?.includes(studentId)) {
-        const conflictingMember = group.members.find(
-          m => m !== studentId && passes.some(p => p.studentId === m && p.status === 'ACTIVE')
-        );
-        if (conflictingMember) {
-          const conflictStudent = allStudents.find(s => s.id === conflictingMember);
-          return { hasConflict: true, groupName: group.name, conflictWith: conflictStudent?.full_name || 'Unknown' };
-        }
-      }
-    }
-    return { hasConflict: false };
-  }, [sandboxMode, sandboxPasses, activePasses, conflictGroups, allStudents]);
-
-  const getStudentInfractions = useCallback((studentId, limit = 10) => {
-    const studentLogs = sandboxMode ? sandboxLogs : logs;
-    return studentLogs
-      .filter(l => l.studentId === studentId && l.type === 'INFRACTION')
-      .slice(0, limit);
-  }, [sandboxMode, sandboxLogs, logs]);
-
-  const housesSorted = [...houses].sort((a, b) => (b.score || 0) - (a.score || 0));
-
-  // Analytics data
-  const analyticsData = {
-    totalPasses: logs.filter(l => l.type === 'PASS').length,
-    totalInfractions: logs.filter(l => l.type === 'INFRACTION').length,
-    totalIncentives: logs.filter(l => l.type === 'INCENTIVE').length,
-    totalTardies: logs.filter(l => l.type === 'TARDY').length,
-    activeNow: activePasses.length,
-  };
-
-  // =====================
-  // ACTION FUNCTIONS
-  // =====================
-
-  const signOutUser = async () => {
+  // Save handlers
+  const handleSaveLabels = async () => {
+    setIsSaving(true);
     try {
-      await signOut(auth);
-      router?.push('/');
-    } catch (err) {
-      console.error('Sign out error:', err);
+      await onUpdateConfig?.('labels', localLabels);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const switchSchool = async (schoolId) => {
-    if (schoolId === 'SANDBOX') {
-      setCurrentSchoolId('SANDBOX');
-      setSandboxMode(true);
-      return;
+  const handleSaveBellSchedule = async () => {
+    setIsSaving(true);
+    try {
+      await onUpdateConfig?.('bell_schedule', localBellSchedule);
+    } finally {
+      setIsSaving(false);
     }
-    
-    if (schoolId === 'COMMAND_CENTER') {
-      setCurrentSchoolId('COMMAND_CENTER');
-      setSandboxMode(false);
-      return;
+  };
+
+  const handleSaveEconomy = async () => {
+    setIsSaving(true);
+    try {
+      await onUpdateConfig?.('economy', localEconomy);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const handleSaveSettings = async () => {
+    setIsSaving(true);
+    try {
+      await onUpdateConfig?.('settings', localSettings);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveHouses = async () => {
+    setIsSaving(true);
+    try {
+      await onUpdateHouses?.(localHouses);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Label array helpers
+  const addLabel = (type) => {
+    setLocalLabels(prev => ({
+      ...prev,
+      [type]: [...prev[type], '']
+    }));
+  };
+
+  const updateLabel = (type, index, value) => {
+    setLocalLabels(prev => ({
+      ...prev,
+      [type]: prev[type].map((item, i) => i === index ? value : item)
+    }));
+  };
+
+  const removeLabel = (type, index) => {
+    setLocalLabels(prev => ({
+      ...prev,
+      [type]: prev[type].filter((_, i) => i !== index)
+    }));
+  };
+
+  // Period helpers
+  const addPeriod = () => {
+    const newId = String(localBellSchedule.periods.length + 1);
+    setLocalBellSchedule(prev => ({
+      ...prev,
+      periods: [...prev.periods, { id: newId, name: `Period ${newId}`, start: '08:00', end: '08:50' }]
+    }));
+  };
+
+  const updatePeriod = (index, field, value) => {
+    setLocalBellSchedule(prev => ({
+      ...prev,
+      periods: prev.periods.map((p, i) => i === index ? { ...p, [field]: value } : p)
+    }));
+  };
+
+  const removePeriod = (index) => {
+    setLocalBellSchedule(prev => ({
+      ...prev,
+      periods: prev.periods.filter((_, i) => i !== index)
+    }));
+  };
+
+  // House helpers
+  const updateHouse = (index, field, value) => {
+    setLocalHouses(prev => prev.map((h, i) => i === index ? { ...h, [field]: value } : h));
+  };
+
+  // File upload handler with actual parsing
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadStatus({ type: 'loading', message: 'Processing file...' });
 
     try {
-      const schoolRef = doc(db, COLLECTIONS.SCHOOLS, schoolId);
-      const schoolSnap = await getDoc(schoolRef);
-      
-      if (!schoolSnap.exists()) {
-        setToast?.({ message: 'School not found', type: 'error' });
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      if (jsonData.length === 0) {
+        setUploadStatus({ type: 'error', message: 'No data found in file' });
         return;
       }
 
-      setCurrentSchoolId(schoolId);
-      setSandboxMode(false);
-      setShowSchoolPrompt(false);
+      // Validate required columns
+      const firstRow = jsonData[0];
+      const hasName = 'full_name' in firstRow || 'name' in firstRow || 'Name' in firstRow || 'Full Name' in firstRow;
+      const hasId = 'student_id' in firstRow || 'id' in firstRow || 'ID' in firstRow || 'Student ID' in firstRow || 'student_id_number' in firstRow;
 
-      // Update user's school_id
-      if (user?.uid) {
-        const userRef = doc(db, COLLECTIONS.USERS, user.uid);
-        await updateDoc(userRef, { school_id: schoolId });
-      }
-    } catch (err) {
-      console.error('Switch school error:', err);
-      setToast?.({ message: 'Failed to switch school', type: 'error' });
-    }
-  };
-
-  const createSchool = async (name) => {
-    if (!isSuperAdmin) {
-      setToast?.({ message: 'Only SuperAdmins can create schools', type: 'error' });
-      return null;
-    }
-
-    try {
-      const schoolId = `${name.toUpperCase().replace(/\s+/g, '_')}_${Date.now()}`;
-      const schoolRef = doc(db, COLLECTIONS.SCHOOLS, schoolId);
-      
-      await setDoc(schoolRef, {
-        name,
-        code: schoolId,
-        created_at: serverTimestamp(),
-        created_by: user?.email,
-        lockdown: false,
-      });
-
-      // Initialize default houses
-      const housesRef = collection(db, housesPath(schoolId));
-      for (const house of DEFAULT_HOUSES) {
-        await addDoc(housesRef, house);
+      if (!hasName || !hasId) {
+        setUploadStatus({ 
+          type: 'error', 
+          message: 'File must have columns: full_name (or Name), student_id (or ID), grade (optional)' 
+        });
+        return;
       }
 
-      // Initialize default configs
-      const configsRef = collection(db, `${COLLECTIONS.SCHOOLS}/${schoolId}/${SCHOOL_SUBCOLLECTIONS.SCHOOL_CONFIGS}`);
-      await setDoc(doc(configsRef, CONFIG_DOCS.LABELS), {
-        infractionButtons: DEFAULT_INFRACTION_LABELS,
-        incentiveButtons: DEFAULT_INCENTIVE_LABELS,
-        passDestinations: DEFAULT_PASS_DESTINATIONS,
-        maxDisplayedDestinations: 8,
-      });
-      await setDoc(doc(configsRef, CONFIG_DOCS.ECONOMY), DEFAULT_ECONOMY);
-      await setDoc(doc(configsRef, CONFIG_DOCS.BELL_SCHEDULE), DEFAULT_BELL_SCHEDULE);
-      await setDoc(doc(configsRef, CONFIG_DOCS.KIOSK), DEFAULT_KIOSK);
-      await setDoc(doc(configsRef, CONFIG_DOCS.SETTINGS), DEFAULT_SETTINGS);
-
-      setToast?.({ message: `School "${name}" created!`, type: 'success' });
-      return schoolId;
-    } catch (err) {
-      console.error('Create school error:', err);
-      setToast?.({ message: 'Failed to create school', type: 'error' });
-      return null;
-    }
-  };
-
-  const issuePass = async (student, destination, originRoom = '') => {
-    // Rate limiting check
-    if (!rateLimiters.issuePass.canProceed()) {
-      setToast?.({ message: 'Too many passes issued. Please wait a moment.', type: 'error' });
-      return false;
-    }
-
-    if (lockdown) {
-      setToast?.({ message: 'Lockdown active - passes disabled', type: 'error' });
-      botRef?.current?.push('siren');
-      return false;
-    }
-
-    if (hasActivePass(student.id)) {
-      setToast?.({ message: `${sanitizeText(student.full_name)} already has an active pass`, type: 'error' });
-      return false;
-    }
-
-    const conflict = checkConflict(student.id);
-    if (conflict.hasConflict && settingsConfig?.conflictAlertsEnabled) {
-      setToast?.({ message: `Conflict alert: ${sanitizeText(student.full_name)} conflicts with ${sanitizeText(conflict.conflictWith)}`, type: 'error' });
-      return false;
-    }
-
-    if (isDestinationFull(destination)) {
-      setToast?.({ message: `${sanitizeText(destination)} is at capacity`, type: 'error' });
-      botRef?.current?.push('waitlist', { student: sanitizeText(student.full_name), destination: sanitizeText(destination) });
-      return false;
-    }
-
-    // Validate and sanitize pass data
-    const passData = {
-      studentId: student.id,
-      studentName: sanitizeStudentName(student.full_name),
-      studentGrade: student.grade_level,
-      destination: sanitizeText(destination),
-      originRoom: sanitizeText(originRoom),
-      teacherEmail: user?.email,
-      teacherName: sanitizeText(userGreeting.fullName),
-      employeeId,
-      startedAt: serverTimestamp(),
-      expectedDurationSec: getEstimatedDuration(destination) * 60,
-      status: 'ACTIVE',
-    };
-
-    const validation = validatePass(passData);
-    if (!validation.valid) {
-      setToast?.({ message: validation.errors[0] || 'Invalid pass data', type: 'error' });
-      return false;
-    }
-
-    if (sandboxMode) {
-      const newPass = { id: `sandbox-pass-${Date.now()}`, ...validation.sanitized, startedAt: { seconds: Date.now() / 1000 } };
-      setSandboxPasses(prev => [...prev, newPass]);
-      setSandboxStudents(prev => prev.map(s => s.id === student.id ? { ...s, status: 'OUT', current_destination: destination } : s));
-      setAllStudents(prev => prev.map(s => s.id === student.id ? { ...s, status: 'OUT', current_destination: destination } : s));
-      setSandboxLogs(prev => [{ id: `log-${Date.now()}`, type: 'PASS', studentId: student.id, studentName: validation.sanitized.studentName, detail: destination, byEmail: user?.email, employeeId, ts: { seconds: Date.now() / 1000 } }, ...prev]);
-      setActivePasses(prev => [...prev, newPass]);
-      botRef?.current?.push('scan', { student: validation.sanitized.studentName, destination });
-      setToast?.({ message: `Pass issued: ${validation.sanitized.studentName} → ${destination}`, type: 'success' });
-      return true;
-    }
-
-    try {
-      // Use transaction for atomic updates
-      await runTransaction(db, async (transaction) => {
-        // Create pass document
-        const passRef = doc(collection(db, activePassesPath(currentSchoolId)));
-        transaction.set(passRef, validation.sanitized);
-
-        // Update student status
-        const studentRef = doc(db, studentsPath(currentSchoolId), student.id);
-        transaction.update(studentRef, {
-          status: 'OUT',
-          current_destination: destination,
-          last_pass_start: serverTimestamp(),
-        });
-
-        // Create log entry
-        const logRef = doc(collection(db, logsPath(currentSchoolId)));
-        transaction.set(logRef, {
-          type: 'PASS',
-          studentId: student.id,
-          studentName: validation.sanitized.studentName,
-          detail: destination,
-          byEmail: user?.email,
-          employeeId,
-          ts: serverTimestamp(),
-        });
-      });
-
-      botRef?.current?.push('scan', { student: validation.sanitized.studentName, destination });
-      setToast?.({ message: `Pass issued: ${validation.sanitized.studentName} → ${destination}`, type: 'success' });
-      return true;
-    } catch (err) {
-      console.error('Issue pass error:', err);
-      setToast?.({ message: 'Failed to issue pass', type: 'error' });
-      return false;
-    }
-  };
-
-  const returnStudent = async (pass) => {
-    if (sandboxMode) {
-      setSandboxPasses(prev => prev.filter(p => p.id !== pass.id));
-      setSandboxStudents(prev => prev.map(s => s.id === pass.studentId ? { ...s, status: 'IN', current_destination: null } : s));
-      setAllStudents(prev => prev.map(s => s.id === pass.studentId ? { ...s, status: 'IN', current_destination: null } : s));
-      setActivePasses(prev => prev.filter(p => p.id !== pass.id));
-      setSandboxLogs(prev => [{ id: `log-${Date.now()}`, type: 'RETURN', studentId: pass.studentId, studentName: pass.studentName, detail: 'Returned', byEmail: user?.email, employeeId, ts: { seconds: Date.now() / 1000 } }, ...prev]);
-      botRef?.current?.push('high5', { student: pass.studentName });
-      setToast?.({ message: `${pass.studentName} returned`, type: 'success' });
-      return true;
-    }
-
-    try {
-      // Update pass status
-      const passRef = doc(db, activePassesPath(currentSchoolId), pass.id);
-      await updateDoc(passRef, {
-        status: 'ENDED',
-        endedAt: serverTimestamp(),
-      });
-
-      // Update student status
-      const studentRef = doc(db, studentsPath(currentSchoolId), pass.studentId);
-      await updateDoc(studentRef, {
+      // Normalize data
+      const students = jsonData.map(row => ({
+        full_name: row.full_name || row.name || row.Name || row['Full Name'] || '',
+        student_id_number: String(row.student_id || row.id || row.ID || row['Student ID'] || row.student_id_number || ''),
+        grade_level: parseInt(row.grade || row.Grade || row.grade_level || row['Grade Level'] || 9, 10),
         status: 'IN',
-        current_destination: null,
+        houseId: null,
+        mtss_score: 0,
+        infraction_count: 0,
+        tardy_count: 0,
+        tardy_streak: 0,
+        incentive_points_student: 0,
+        incentive_points_team: 0,
+      })).filter(s => s.full_name && s.student_id_number);
+
+      // Call the upload handler with parsed data
+      await onHandleFileUpload?.(students);
+
+      setUploadStatus({ 
+        type: 'success', 
+        message: `Successfully imported ${students.length} students` 
       });
 
-      // Create log entry
-      await addDoc(collection(db, logsPath(currentSchoolId)), {
-        type: 'RETURN',
-        studentId: pass.studentId,
-        studentName: pass.studentName,
-        detail: `Returned from ${pass.destination}`,
-        byEmail: user?.email,
-        employeeId,
-        ts: serverTimestamp(),
-      });
-
-      botRef?.current?.push('high5', { student: pass.studentName });
-      setToast?.({ message: `${pass.studentName} returned`, type: 'success' });
-      return true;
-    } catch (err) {
-      console.error('Return student error:', err);
-      setToast?.({ message: 'Failed to return student', type: 'error' });
-      return false;
-    }
-  };
-
-  const returnAllStudents = async () => {
-    const passes = sandboxMode ? sandboxPasses : activePasses;
-    for (const pass of passes) {
-      await returnStudent(pass);
-    }
-  };
-
-  const logInfraction = async (student, label) => {
-    if (sandboxMode) {
-      setSandboxStudents(prev => prev.map(s => s.id === student.id ? { ...s, mtss_score: (s.mtss_score || 0) + 1, infraction_count: (s.infraction_count || 0) + 1 } : s));
-      setAllStudents(prev => prev.map(s => s.id === student.id ? { ...s, mtss_score: (s.mtss_score || 0) + 1, infraction_count: (s.infraction_count || 0) + 1 } : s));
-      setSandboxLogs(prev => [{ id: `log-${Date.now()}`, type: 'INFRACTION', studentId: student.id, studentName: student.full_name, detail: label, byEmail: user?.email, employeeId, points: -1, ts: { seconds: Date.now() / 1000 } }, ...prev]);
-      botRef?.current?.push('sad', { student: student.full_name });
-      setToast?.({ message: `Infraction logged: ${student.full_name} - ${label}`, type: 'info' });
-      return true;
-    }
-
-    try {
-      // Update student
-      const studentRef = doc(db, studentsPath(currentSchoolId), student.id);
-      await updateDoc(studentRef, {
-        mtss_score: increment(1),
-        infraction_count: increment(1),
-        incentive_points_student: increment(-1),
-      });
-
-      // Create log
-      await addDoc(collection(db, logsPath(currentSchoolId)), {
-        type: 'INFRACTION',
-        studentId: student.id,
-        studentName: student.full_name,
-        detail: label,
-        byEmail: user?.email,
-        employeeId,
-        points: -1,
-        ts: serverTimestamp(),
-      });
-
-      botRef?.current?.push('sad', { student: student.full_name });
-      setToast?.({ message: `Infraction logged: ${student.full_name} - ${label}`, type: 'info' });
-      return true;
-    } catch (err) {
-      console.error('Log infraction error:', err);
-      setToast?.({ message: 'Failed to log infraction', type: 'error' });
-      return false;
-    }
-  };
-
-  const awardPoints = async (student, label, points = 1) => {
-    const studentRatio = economyConfig?.studentPointRatio || 0.4;
-    const teamRatio = economyConfig?.teamPointRatio || 0.6;
-    const studentPoints = Math.round(points * studentRatio);
-    const teamPoints = Math.round(points * teamRatio);
-
-    if (sandboxMode) {
-      setSandboxStudents(prev => prev.map(s => s.id === student.id ? { ...s, incentive_points_student: (s.incentive_points_student || 0) + studentPoints, incentive_points_team: (s.incentive_points_team || 0) + teamPoints } : s));
-      setAllStudents(prev => prev.map(s => s.id === student.id ? { ...s, incentive_points_student: (s.incentive_points_student || 0) + studentPoints, incentive_points_team: (s.incentive_points_team || 0) + teamPoints } : s));
-      
-      if (student.houseId) {
-        setSandboxHouses(prev => prev.map(h => h.id === student.houseId ? { ...h, score: (h.score || 0) + teamPoints } : h));
-        setHouses(prev => prev.map(h => h.id === student.houseId ? { ...h, score: (h.score || 0) + teamPoints } : h));
-      }
-      
-      setSandboxLogs(prev => [{ id: `log-${Date.now()}`, type: 'INCENTIVE', studentId: student.id, studentName: student.full_name, detail: label, byEmail: user?.email, employeeId, points: studentPoints, teamPoints, ts: { seconds: Date.now() / 1000 } }, ...prev]);
-      botRef?.current?.push('party', { student: student.full_name });
-      setToast?.({ message: `+${points} points to ${student.full_name}!`, type: 'success' });
-      return true;
-    }
-
-    try {
-      // Update student
-      const studentRef = doc(db, studentsPath(currentSchoolId), student.id);
-      await updateDoc(studentRef, {
-        incentive_points_student: increment(studentPoints),
-        incentive_points_team: increment(teamPoints),
-      });
-
-      // Update house
-      if (student.houseId) {
-        const houseRef = doc(db, housesPath(currentSchoolId), student.houseId);
-        await updateDoc(houseRef, { score: increment(teamPoints) });
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
 
-      // Create log
-      await addDoc(collection(db, logsPath(currentSchoolId)), {
-        type: 'INCENTIVE',
-        studentId: student.id,
-        studentName: student.full_name,
-        detail: label,
-        byEmail: user?.email,
-        employeeId,
-        points: studentPoints,
-        teamPoints,
-        ts: serverTimestamp(),
-      });
-
-      botRef?.current?.push('party', { student: student.full_name });
-      setToast?.({ message: `+${points} points to ${student.full_name}!`, type: 'success' });
-      return true;
-    } catch (err) {
-      console.error('Award points error:', err);
-      setToast?.({ message: 'Failed to award points', type: 'error' });
-      return false;
-    }
-  };
-
-  const logTardy = async (student) => {
-    if (sandboxMode) {
-      setSandboxStudents(prev => prev.map(s => s.id === student.id ? { ...s, tardy_count: (s.tardy_count || 0) + 1, tardy_streak: (s.tardy_streak || 0) + 1 } : s));
-      setAllStudents(prev => prev.map(s => s.id === student.id ? { ...s, tardy_count: (s.tardy_count || 0) + 1, tardy_streak: (s.tardy_streak || 0) + 1 } : s));
-      setSandboxLogs(prev => [{ id: `log-${Date.now()}`, type: 'TARDY', studentId: student.id, studentName: student.full_name, detail: 'Late arrival', byEmail: user?.email, employeeId, ts: { seconds: Date.now() / 1000 } }, ...prev]);
-      setToast?.({ message: `Tardy logged: ${student.full_name}`, type: 'info' });
-      return true;
-    }
-
-    try {
-      const studentRef = doc(db, studentsPath(currentSchoolId), student.id);
-      await updateDoc(studentRef, {
-        tardy_count: increment(1),
-        tardy_streak: increment(1),
-      });
-
-      await addDoc(collection(db, logsPath(currentSchoolId)), {
-        type: 'TARDY',
-        studentId: student.id,
-        studentName: student.full_name,
-        detail: 'Late arrival',
-        byEmail: user?.email,
-        employeeId,
-        ts: serverTimestamp(),
-      });
-
-      setToast?.({ message: `Tardy logged: ${student.full_name}`, type: 'info' });
-      return true;
-    } catch (err) {
-      console.error('Log tardy error:', err);
-      setToast?.({ message: 'Failed to log tardy', type: 'error' });
-      return false;
-    }
-  };
-
-  const toggleLockdown = async () => {
-    if (!isSchoolAdmin) {
-      setToast?.({ message: 'Admin access required', type: 'error' });
-      return;
-    }
-
-    const newState = !lockdown;
-
-    if (sandboxMode) {
-      setLockdown(newState);
-      botRef?.current?.push(newState ? 'siren' : 'happy');
-      setToast?.({ message: newState ? '🚨 LOCKDOWN ACTIVATED' : 'Lockdown lifted', type: newState ? 'error' : 'success' });
-      return;
-    }
-
-    try {
-      const schoolRef = doc(db, COLLECTIONS.SCHOOLS, currentSchoolId);
-      await updateDoc(schoolRef, {
-        lockdown: newState,
-        lockdownMeta: newState ? { activatedBy: user?.email, activatedAt: serverTimestamp() } : null,
-      });
-
-      botRef?.current?.push(newState ? 'siren' : 'happy');
-      setToast?.({ message: newState ? '🚨 LOCKDOWN ACTIVATED' : 'Lockdown lifted', type: newState ? 'error' : 'success' });
-    } catch (err) {
-      console.error('Toggle lockdown error:', err);
-      setToast?.({ message: 'Failed to toggle lockdown', type: 'error' });
-    }
-  };
-
-  const generateLockdownReport = () => {
-    const passes = sandboxMode ? sandboxPasses : activePasses;
-    const report = {
-      timestamp: new Date().toISOString(),
-      school: displaySchoolName,
-      lockdownActive: lockdown,
-      studentsOut: passes.length,
-      students: passes.map(p => ({
-        name: p.studentName,
-        destination: p.destination,
-        startedAt: p.startedAt?.seconds ? new Date(p.startedAt.seconds * 1000).toLocaleTimeString() : 'Unknown',
-      })),
-    };
-    return report;
-  };
-
-  // Conflict Group Management
-  const addConflictGroup = async (name, members) => {
-    if (sandboxMode) {
-      const newGroup = { id: `conflict-${Date.now()}`, name, members, createdAt: { seconds: Date.now() / 1000 } };
-      setConflictGroups(prev => [...prev, newGroup]);
-      setToast?.({ message: `Conflict group "${name}" created`, type: 'success' });
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, conflictGroupsPath(currentSchoolId)), {
-        name,
-        members,
-        createdAt: serverTimestamp(),
-      });
-      setToast?.({ message: `Conflict group "${name}" created`, type: 'success' });
-    } catch (err) {
-      console.error('Add conflict group error:', err);
-      setToast?.({ message: 'Failed to create conflict group', type: 'error' });
-    }
-  };
-
-  const removeConflictGroup = async (groupId) => {
-    if (sandboxMode) {
-      setConflictGroups(prev => prev.filter(g => g.id !== groupId));
-      setToast?.({ message: 'Conflict group removed', type: 'success' });
-      return;
-    }
-
-    try {
-      await deleteDoc(doc(db, conflictGroupsPath(currentSchoolId), groupId));
-      setToast?.({ message: 'Conflict group removed', type: 'success' });
-    } catch (err) {
-      console.error('Remove conflict group error:', err);
-      setToast?.({ message: 'Failed to remove conflict group', type: 'error' });
-    }
-  };
-
-  // Config Management
-  const updateConfig = async (configType, data) => {
-    if (sandboxMode) {
-      switch (configType) {
-        case 'labels': setLabelsConfig(data); break;
-        case 'bell_schedule': setBellSchedule(data); break;
-        case 'economy': setEconomyConfig(data); break;
-        case 'kiosk': setKioskConfig(data); break;
-        case 'settings': setSettingsConfig(data); break;
-      }
-      setToast?.({ message: 'Config updated (sandbox)', type: 'success' });
-      return;
-    }
-
-    try {
-      const configRef = doc(db, configPath(currentSchoolId, configType));
-      await setDoc(configRef, data, { merge: true });
-      setToast?.({ message: 'Configuration updated', type: 'success' });
-    } catch (err) {
-      console.error('Update config error:', err);
-      setToast?.({ message: 'Failed to update config', type: 'error' });
-    }
-  };
-
-  const updateHouses = async (housesData) => {
-    if (sandboxMode) {
-      setSandboxHouses(housesData);
-      setHouses(housesData);
-      setToast?.({ message: 'Houses updated (sandbox)', type: 'success' });
-      return;
-    }
-
-    try {
-      const batch = writeBatch(db);
-      for (const house of housesData) {
-        const houseRef = doc(db, housesPath(currentSchoolId), house.id);
-        batch.set(houseRef, house, { merge: true });
-      }
-      await batch.commit();
-      setToast?.({ message: 'Houses updated', type: 'success' });
-    } catch (err) {
-      console.error('Update houses error:', err);
-      setToast?.({ message: 'Failed to update houses', type: 'error' });
-    }
-  };
-
-  // File Upload Handler
-  // Handle file upload - accepts pre-parsed student data from AdminPanel
-  const handleFileUpload = async (studentsData) => {
-    if (!Array.isArray(studentsData) || studentsData.length === 0) {
-      setToast?.({ message: 'No valid student data to import', type: 'error' });
-      return;
-    }
-
-    if (sandboxMode) {
-      // In sandbox, just add to local state
-      const newStudents = studentsData.map((s, i) => ({
-        ...s,
-        id: `imported-${Date.now()}-${i}`,
-      }));
-      setSandboxStudents(prev => [...prev, ...newStudents]);
-      setAllStudents(prev => [...prev, ...newStudents]);
-      setToast?.({ message: `Imported ${newStudents.length} students (sandbox)`, type: 'success' });
-      return;
-    }
-
-    try {
-      setToast?.({ message: 'Uploading students...', type: 'info' });
-      
-      // Use batched writes for efficiency (max 500 per batch)
-      const batchSize = 500;
-      let imported = 0;
-      
-      for (let i = 0; i < studentsData.length; i += batchSize) {
-        const batch = writeBatch(db);
-        const chunk = studentsData.slice(i, i + batchSize);
-        
-        for (const student of chunk) {
-          // Check if student already exists by student_id_number
-          const existingQuery = query(
-            collection(db, studentsPath(currentSchoolId)),
-            where('student_id_number', '==', student.student_id_number),
-            limit(1)
-          );
-          const existingSnap = await getDocs(existingQuery);
-          
-          if (existingSnap.empty) {
-            // New student - create
-            const studentRef = doc(collection(db, studentsPath(currentSchoolId)));
-            batch.set(studentRef, {
-              ...student,
-              created_at: serverTimestamp(),
-            });
-            imported++;
-          } else {
-            // Existing student - update name and grade only (preserve scores)
-            const existingDoc = existingSnap.docs[0];
-            batch.update(existingDoc.ref, {
-              full_name: student.full_name,
-              grade_level: student.grade_level,
-              updated_at: serverTimestamp(),
-            });
-          }
-        }
-        
-        await batch.commit();
-      }
-      
-      setToast?.({ message: `Imported ${imported} new students, updated ${studentsData.length - imported} existing`, type: 'success' });
     } catch (err) {
       console.error('File upload error:', err);
-      setToast?.({ message: 'Failed to upload students', type: 'error' });
+      setUploadStatus({ type: 'error', message: 'Failed to parse file. Ensure it is a valid Excel or CSV file.' });
     }
   };
 
-  // Box Queue Management - now actually performs the requested action
-  const resolveBoxQueueItem = async (itemId, approved, itemData = null) => {
-    if (sandboxMode) {
-      setBoxQueue(prev => prev.filter(i => i.id !== itemId));
-      setToast?.({ message: approved ? 'Approved' : 'Rejected', type: 'success' });
-      return;
-    }
+  const tabs = [
+    { id: 'labels', label: 'Labels', icon: Tag },
+    { id: 'schedule', label: 'Bell Schedule', icon: Clock },
+    { id: 'economy', label: 'Economy', icon: DollarSign },
+    { id: 'houses', label: 'Houses', icon: Home },
+    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'roster', label: 'Roster', icon: Users },
+  ];
 
-    try {
-      // If approved, perform the requested action
-      if (approved && itemData) {
-        switch (itemData.type) {
-          case 'ADD_DESTINATION':
-            if (itemData.destination) {
-              const currentLabels = labelsConfig?.passDestinations || [];
-              if (!currentLabels.includes(itemData.destination)) {
-                await updateConfig('labels', {
-                  ...labelsConfig,
-                  passDestinations: [...currentLabels, itemData.destination]
-                });
-              }
-            }
-            break;
-          case 'REMOVE_DESTINATION':
-            if (itemData.destination) {
-              const currentLabels = labelsConfig?.passDestinations || [];
-              await updateConfig('labels', {
-                ...labelsConfig,
-                passDestinations: currentLabels.filter(d => d !== itemData.destination)
-              });
-            }
-            break;
-          case 'PROMOTE_USER':
-            if (itemData.userId && itemData.newRole) {
-              const userRef = doc(db, COLLECTIONS.USERS, itemData.userId);
-              await updateDoc(userRef, { role: itemData.newRole });
-            }
-            break;
-          default:
-            // Unknown action type
-            break;
-        }
-      }
-      
-      // Delete the queue item
-      await deleteDoc(doc(db, boxQueuePath(currentSchoolId), itemId));
-      setToast?.({ message: approved ? 'Approved and applied' : 'Rejected', type: 'success' });
-    } catch (err) {
-      console.error('Resolve queue item error:', err);
-      setToast?.({ message: 'Failed to process request', type: 'error' });
-    }
-  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex justify-between items-center p-6 border-b border-border">
+          <h2 className="text-2xl font-black flex items-center gap-2">
+            <Settings className="text-primary" /> Admin Panel - The Box
+          </h2>
+          <button 
+            onClick={onClose} 
+            className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
 
-  // Broadcast Management
-  const sendBroadcast = async (message, priority = 'normal', targetAudience = 'All Staff') => {
-    if (sandboxMode) {
-      const newBroadcast = {
-        id: `broadcast-${Date.now()}`,
-        message,
-        priority,
-        targetAudience,
-        senderName: userGreeting.fullName,
-        senderEmail: user?.email,
-        ts: { seconds: Date.now() / 1000 },
-        pinned: false,
-      };
-      setBroadcasts(prev => [newBroadcast, ...prev]);
-      botRef?.current?.showBroadcast(newBroadcast);
-      setToast?.({ message: 'Broadcast sent', type: 'success' });
-      return;
-    }
+        {/* Tabs */}
+        <div className="flex border-b border-border overflow-x-auto">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 flex items-center gap-2 text-sm font-bold whitespace-nowrap transition-colors ${
+                activeTab === tab.id 
+                  ? 'text-primary border-b-2 border-primary' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-    try {
-      await addDoc(collection(db, broadcastsPath(currentSchoolId)), {
-        message,
-        priority,
-        targetAudience,
-        senderName: userGreeting.fullName,
-        senderEmail: user?.email,
-        ts: serverTimestamp(),
-        pinned: false,
-      });
-      setToast?.({ message: 'Broadcast sent', type: 'success' });
-    } catch (err) {
-      console.error('Send broadcast error:', err);
-      setToast?.({ message: 'Failed to send broadcast', type: 'error' });
-    }
-  };
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* Labels Tab */}
+          {activeTab === 'labels' && (
+            <div className="space-y-6">
+              {/* Infraction Buttons */}
+              <div data-guide="labels-config">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="font-bold">Infraction Buttons</label>
+                  <button onClick={() => addLabel('infractionButtons')} className="p-1 bg-primary/20 text-primary rounded">
+                    <Plus size={16} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {localLabels.infractionButtons.map((label, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={label}
+                        onChange={(e) => updateLabel('infractionButtons', i, e.target.value)}
+                        className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        placeholder="Button label..."
+                      />
+                      <button onClick={() => removeLabel('infractionButtons', i)} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-  const deleteBroadcast = async (broadcastId) => {
-    if (sandboxMode) {
-      setBroadcasts(prev => prev.filter(b => b.id !== broadcastId));
-      return;
-    }
-    try {
-      await deleteDoc(doc(db, broadcastsPath(currentSchoolId), broadcastId));
-    } catch (err) {
-      console.error('Delete broadcast error:', err);
-    }
-  };
+              {/* Incentive Buttons */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="font-bold">Incentive Buttons</label>
+                  <button onClick={() => addLabel('incentiveButtons')} className="p-1 bg-primary/20 text-primary rounded">
+                    <Plus size={16} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {localLabels.incentiveButtons.map((label, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={label}
+                        onChange={(e) => updateLabel('incentiveButtons', i, e.target.value)}
+                        className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        placeholder="Button label..."
+                      />
+                      <button onClick={() => removeLabel('incentiveButtons', i)} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-  const pinBroadcast = async (broadcastId, pinned) => {
-    if (sandboxMode) {
-      setBroadcasts(prev => prev.map(b => b.id === broadcastId ? { ...b, pinned } : b).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)));
-      return;
-    }
-    try {
-      await updateDoc(doc(db, broadcastsPath(currentSchoolId), broadcastId), { pinned });
-    } catch (err) {
-      console.error('Pin broadcast error:', err);
-    }
-  };
+              {/* Pass Destinations */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="font-bold">Pass Destinations</label>
+                  <button onClick={() => addLabel('passDestinations')} className="p-1 bg-primary/20 text-primary rounded">
+                    <Plus size={16} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {localLabels.passDestinations.map((label, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={label}
+                        onChange={(e) => updateLabel('passDestinations', i, e.target.value)}
+                        className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        placeholder="Destination..."
+                      />
+                      <button onClick={() => removeLabel('passDestinations', i)} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-  // Parent Contact Management
-  const saveParentContact = async (contactData) => {
-    if (sandboxMode) {
-      const newContact = { id: `contact-${Date.now()}`, ...contactData, ts: { seconds: Date.now() / 1000 } };
-      setParentContacts(prev => [newContact, ...prev]);
-      setToast?.({ message: 'Parent contact saved', type: 'success' });
-      return;
-    }
+              {/* Max Displayed */}
+              <div>
+                <label className="font-bold block mb-2">Max Displayed Destinations</label>
+                <input
+                  type="number"
+                  min="4"
+                  max="20"
+                  value={localLabels.maxDisplayedDestinations}
+                  onChange={(e) => setLocalLabels(prev => ({ ...prev, maxDisplayedDestinations: parseInt(e.target.value) || 8 }))}
+                  className="w-24 px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                />
+              </div>
 
-    try {
-      await addDoc(collection(db, parentContactsPath(currentSchoolId)), {
-        ...contactData,
-        ts: serverTimestamp(),
-      });
-      setToast?.({ message: 'Parent contact saved', type: 'success' });
-    } catch (err) {
-      console.error('Save parent contact error:', err);
-      setToast?.({ message: 'Failed to save contact', type: 'error' });
-    }
-  };
+              <button 
+                onClick={handleSaveLabels} 
+                disabled={isSaving}
+                className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Save size={18} /> {isSaving ? 'Saving...' : 'Save Labels'}
+              </button>
+            </div>
+          )}
 
-  // =====================
-  // RETURN STATE & ACTIONS
-  // =====================
+          {/* Bell Schedule Tab */}
+          {activeTab === 'schedule' && (
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="font-bold">Periods</label>
+                  <button onClick={addPeriod} className="p-1 bg-primary/20 text-primary rounded">
+                    <Plus size={16} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {localBellSchedule.periods.map((period, i) => (
+                    <div key={period.id} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={period.name}
+                        onChange={(e) => updatePeriod(i, 'name', e.target.value)}
+                        className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        placeholder="Period name..."
+                      />
+                      <input
+                        type="time"
+                        value={period.start}
+                        onChange={(e) => updatePeriod(i, 'start', e.target.value)}
+                        className="px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                      />
+                      <span className="text-muted-foreground">to</span>
+                      <input
+                        type="time"
+                        value={period.end}
+                        onChange={(e) => updatePeriod(i, 'end', e.target.value)}
+                        className="px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                      />
+                      <button onClick={() => removePeriod(i)} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-  return {
-    // Auth
-    user,
-    userData,
-    isSchoolAdmin,
-    isSuperAdmin,
-    userGreeting,
-    employeeId,
-    signOutUser,
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold block mb-2">Passing Time (minutes)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="15"
+                    value={localBellSchedule.passingTime}
+                    onChange={(e) => setLocalBellSchedule(prev => ({ ...prev, passingTime: parseInt(e.target.value) || 5 }))}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-2">Tardy Grace Period (minutes)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={localBellSchedule.gracePeriodMinutes}
+                    onChange={(e) => setLocalBellSchedule(prev => ({ ...prev, gracePeriodMinutes: parseInt(e.target.value) || 3 }))}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                  />
+                </div>
+              </div>
 
-    // School
-    currentSchoolId,
-    displaySchoolName,
-    schoolData,
-    sandboxMode,
-    switchSchool,
-    createSchool,
-    allSchools,
+              <button 
+                onClick={handleSaveBellSchedule} 
+                disabled={isSaving}
+                className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Save size={18} /> {isSaving ? 'Saving...' : 'Save Bell Schedule'}
+              </button>
+            </div>
+          )}
 
-    // UI
-    isLoading,
-    showSchoolPrompt,
-    setShowSchoolPrompt,
-    activeTab,
-    setActiveTab,
-    selectedStudent,
-    setSelectedStudent,
-    theme,
-    setTheme,
+          {/* Economy Tab */}
+          {activeTab === 'economy' && (
+            <div className="space-y-6" data-guide="economy-config">
+              <div className="p-4 bg-accent/50 border border-border rounded-xl">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Configure how points are split between individual students and their houses.
+                  The two ratios must add up to 1.0 (100%).
+                </p>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bold block mb-2">Student Ratio</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={localEconomy.studentPointRatio * 100}
+                        onChange={(e) => {
+                          const studentRatio = parseInt(e.target.value) / 100;
+                          setLocalEconomy({ studentPointRatio: studentRatio, teamPointRatio: 1 - studentRatio });
+                        }}
+                        className="flex-1"
+                      />
+                      <span className="font-bold text-lg w-16 text-right">{Math.round(localEconomy.studentPointRatio * 100)}%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="font-bold block mb-2">House Ratio</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={localEconomy.teamPointRatio * 100}
+                        onChange={(e) => {
+                          const teamRatio = parseInt(e.target.value) / 100;
+                          setLocalEconomy({ teamPointRatio: teamRatio, studentPointRatio: 1 - teamRatio });
+                        }}
+                        className="flex-1"
+                      />
+                      <span className="font-bold text-lg w-16 text-right">{Math.round(localEconomy.teamPointRatio * 100)}%</span>
+                    </div>
+                  </div>
+                </div>
 
-    // Data
-    allStudents,
-    activePasses,
-    logs,
-    houses,
-    housesSorted,
-    conflictGroups,
-    boxQueue,
-    waitlist,
-    broadcasts,
-    parentContacts,
+                <div className="mt-4 text-center">
+                  <span className="text-sm text-muted-foreground">
+                    When awarding 10 points: Student gets {Math.round(10 * localEconomy.studentPointRatio)}, 
+                    House gets {Math.round(10 * localEconomy.teamPointRatio)}
+                  </span>
+                </div>
+              </div>
 
-    // Configs
-    labelsConfig,
-    bellSchedule,
-    economyConfig,
-    kioskConfig,
-    settingsConfig,
-    housesConfig,
+              <button 
+                onClick={handleSaveEconomy} 
+                disabled={isSaving}
+                className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Save size={18} /> {isSaving ? 'Saving...' : 'Save Economy Settings'}
+              </button>
+            </div>
+          )}
 
-    // Safety
-    lockdown,
-    lockdownMeta,
-    toggleLockdown,
-    generateLockdownReport,
+          {/* Houses Tab */}
+          {activeTab === 'houses' && (
+            <div className="space-y-6" data-guide="houses-config">
+              <div className="space-y-4">
+                {localHouses.map((house, i) => (
+                  <div key={house.id} className="p-4 bg-accent/50 border border-border rounded-xl">
+                    <div className="grid grid-cols-4 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-muted-foreground block mb-1">Name</label>
+                        <input
+                          type="text"
+                          value={house.name}
+                          onChange={(e) => updateHouse(i, 'name', e.target.value)}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-muted-foreground block mb-1">Mascot Emoji</label>
+                        <input
+                          type="text"
+                          value={house.mascot}
+                          onChange={(e) => updateHouse(i, 'mascot', e.target.value)}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-center text-2xl"
+                          maxLength={2}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-muted-foreground block mb-1">Color</label>
+                        <input
+                          type="color"
+                          value={house.color}
+                          onChange={(e) => updateHouse(i, 'color', e.target.value)}
+                          className="w-full h-10 bg-background border border-border rounded-lg cursor-pointer"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-muted-foreground block mb-1">Current Score</label>
+                        <div className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-center font-bold">
+                          {house.score || 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-    // Actions
-    issuePass,
-    returnStudent,
-    returnAllStudents,
-    logInfraction,
-    awardPoints,
-    logTardy,
+              <button 
+                onClick={handleSaveHouses} 
+                disabled={isSaving}
+                className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Save size={18} /> {isSaving ? 'Saving...' : 'Save Houses'}
+              </button>
+            </div>
+          )}
 
-    // Helpers
-    hasActivePass,
-    isDestinationFull,
-    getWaitlistPosition,
-    destinationCounts,
-    checkConflict,
-    getStudentInfractions,
-    analyticsData,
+          {/* Settings Tab */}
+          {activeTab === 'settings' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold block mb-2">Pass Overtime Warning (minutes)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="60"
+                    value={localSettings.passOvertimeMinutes}
+                    onChange={(e) => setLocalSettings(prev => ({ ...prev, passOvertimeMinutes: parseInt(e.target.value) || 10 }))}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">StrideBot warns when a pass exceeds this duration</p>
+                </div>
+                <div>
+                  <label className="font-bold block mb-2">Max Capacity per Destination</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={localSettings.maxCapacityPerDestination}
+                    onChange={(e) => setLocalSettings(prev => ({ ...prev, maxCapacityPerDestination: parseInt(e.target.value) || 5 }))}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Students join waitlist when destination is full</p>
+                </div>
+              </div>
 
-    // Admin
-    updateConfig,
-    updateHouses,
-    handleFileUpload,
-    resolveBoxQueueItem,
-    addConflictGroup,
-    removeConflictGroup,
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold block mb-2">Tardy Streak Threshold</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={localSettings.tardyStreakThreshold}
+                    onChange={(e) => setLocalSettings(prev => ({ ...prev, tardyStreakThreshold: parseInt(e.target.value) || 4 }))}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Alert when student hits this many consecutive tardies</p>
+                </div>
+                <div>
+                  <label className="font-bold block mb-2">Conflict Alerts</label>
+                  <button
+                    onClick={() => setLocalSettings(prev => ({ ...prev, conflictAlertsEnabled: !prev.conflictAlertsEnabled }))}
+                    className={`w-full py-3 rounded-lg font-bold transition-colors ${
+                      localSettings.conflictAlertsEnabled 
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    }`}
+                  >
+                    {localSettings.conflictAlertsEnabled ? 'Enabled' : 'Disabled'}
+                  </button>
+                  <p className="text-xs text-muted-foreground mt-1">Block passes when conflict group members are out</p>
+                </div>
+              </div>
 
-    // Communication
-    sendBroadcast,
-    deleteBroadcast,
-    pinBroadcast,
-    saveParentContact,
-  };
+              <button 
+                onClick={handleSaveSettings} 
+                disabled={isSaving}
+                className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Save size={18} /> {isSaving ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          )}
+
+          {/* Roster Tab */}
+          {activeTab === 'roster' && (
+            <div className="space-y-6">
+              <div className="p-6 border-2 border-dashed border-border rounded-xl text-center" data-guide="upload-roster">
+                <FileSpreadsheet className="mx-auto mb-4 text-muted-foreground" size={48} />
+                <h3 className="font-bold mb-2">Upload Student Roster</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Upload an Excel (.xlsx) or CSV file with columns:<br />
+                  <strong>full_name</strong> (or Name), <strong>student_id</strong> (or ID), <strong>grade</strong> (optional)
+                </p>
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="roster-upload"
+                />
+                <label
+                  htmlFor="roster-upload"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
+                >
+                  <Upload size={18} /> Select File
+                </label>
+
+                {uploadStatus && (
+                  <div className={`mt-4 p-3 rounded-lg flex items-center justify-center gap-2 ${
+                    uploadStatus.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' :
+                    uploadStatus.type === 'error' ? 'bg-red-500/20 text-red-400' :
+                    'bg-amber-500/20 text-amber-400'
+                  }`}>
+                    {uploadStatus.type === 'error' && <AlertTriangle size={16} />}
+                    {uploadStatus.message}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-accent/50 border border-border rounded-xl">
+                <h4 className="font-bold mb-2">Current Roster</h4>
+                <p className="text-sm text-muted-foreground">
+                  {allStudents?.length || 0} students loaded
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
