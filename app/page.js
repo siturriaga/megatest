@@ -33,9 +33,15 @@ export default function LoginPage() {
       if (err.code === 'auth/popup-closed-by-user') {
         setError('Sign-in cancelled. Please try again.');
       } else if (err.code === 'auth/unauthorized-domain') {
-        setError('This domain is not authorized. Please contact support.');
+        setError('This domain is not authorized. Please add it to Firebase Console → Authentication → Settings → Authorized domains.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('Network error: Unable to reach Google servers. Check your internet connection, disable any ad blockers or VPNs, and try again.');
+      } else if (err.code === 'auth/popup-blocked') {
+        setError('Pop-up blocked. Please allow pop-ups for this site and try again.');
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        setError('Sign-in cancelled. Please try again.');
       } else {
-        setError('Sign-in failed. Please try again.');
+        setError(`Sign-in failed: ${err.message || 'Unknown error'}. Please try again.`);
       }
       setSigningIn(false);
     }
@@ -66,7 +72,7 @@ export default function LoginPage() {
               S
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight">Synapse Copilot: Bridging the Gaps in Education</h1>
+              <h1 className="text-2xl font-black tracking-tight">STRIDE</h1>
               <p className="text-xs text-white/40 font-medium">School Management System</p>
             </div>
           </div>
