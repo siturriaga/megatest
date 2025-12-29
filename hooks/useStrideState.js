@@ -11,13 +11,14 @@ import { sanitizeText, sanitizeStudentName, isAllowedDomain, rateLimiters } from
 import { validatePass, validateLogEntry, validateBroadcast, validateConflictGroup, validateParentContact, validateSchool, validateConfig } from '../utils/validators';
 
 const ALLOWED_DOMAIN = 'dadeschools.net';
-const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || null;
+const CONSENT_VERSION = '1.0.0';
 
 export function useStrideState(router, botRef, setToast, user, setUser) {
   // Auth & User State
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSchoolPrompt, setShowSchoolPrompt] = useState(false);
+  const [showConsentFlow, setShowConsentFlow] = useState(false);
 
   // School State
   const [currentSchoolId, setCurrentSchoolId] = useState(null);
@@ -67,11 +68,24 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   // Unsubscribe refs
   const unsubscribesRef = useRef([]);
 
-  // Derived state
-  const isSuperAdmin = userData?.role === ROLES.SUPER_ADMIN || user?.email === SUPER_ADMIN_EMAIL;
+  // =====================
+  // DERIVED STATE - No hardcoded emails, Firestore only
+  // =====================
+  const isSuperAdmin = userData?.role === ROLES.SUPER_ADMIN;
   const isSchoolAdmin = userData?.role === ROLES.SCHOOL_ADMIN || isSuperAdmin;
   const employeeId = userData?.employee_id || user?.email?.split('@')[0]?.toUpperCase() || 'UNKNOWN';
   
+  // Check if user needs consent flow (not SuperAdmin, hasn't consented yet)
+  const needsConsent = userData && 
+                       !isSuperAdmin && 
+                       (!userData.aup_accepted || userData.aup_version !== CONSENT_VERSION);
+  
+  // Check if user needs school selection (not SuperAdmin, no school assigned)
+  const needsSchoolSelection = userData && 
+                               !isSuperAdmin && 
+                               !userData.school_id && 
+                               userData.aup_accepted;
+
   const userGreeting = {
     firstName: user?.displayName?.split(' ')[0] || 'Teacher',
     fullName: user?.displayName || 'Teacher',
@@ -92,65 +106,84 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     if (savedTheme) setTheme(savedTheme);
   }, []);
 
-  // Auth listener
+  // =====================
+  // AUTH LISTENER - Clean flow without hardcoded emails
+  // =====================
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const email = firebaseUser.email || '';
         const domain = email.split('@')[1];
         
-        // Domain restriction
-        if (domain !== ALLOWED_DOMAIN && email !== SUPER_ADMIN_EMAIL) {
-          await signOut(auth);
-          setToast?.({ message: 'Access restricted to @dadeschools.net accounts', type: 'error' });
-          setIsLoading(false);
-          return;
-        }
-
         setUser(firebaseUser);
         
-        // Fetch or create user document
+        // Fetch existing user document
         const userRef = doc(db, COLLECTIONS.USERS, firebaseUser.uid);
         const userSnap = await getDoc(userRef);
         
         if (userSnap.exists()) {
+          // =====================
+          // EXISTING USER
+          // =====================
           const data = userSnap.data();
           setUserData(data);
           
-          // Auto-assign SuperAdmin role
-          if (email === SUPER_ADMIN_EMAIL && data.role !== ROLES.SUPER_ADMIN) {
-            await updateDoc(userRef, { role: ROLES.SUPER_ADMIN });
-            setUserData({ ...data, role: ROLES.SUPER_ADMIN });
+          // SuperAdmin: Skip everything, go to command center
+          if (data.role === ROLES.SUPER_ADMIN) {
+            if (data.school_id && data.school_id !== 'COMMAND_CENTER') {
+              setCurrentSchoolId(data.school_id);
+            } else {
+              setCurrentSchoolId('COMMAND_CENTER');
+            }
+            setIsLoading(false);
+            return;
           }
           
-          // Check for existing school
+          // Regular user: Check consent
+          if (!data.aup_accepted || data.aup_version !== CONSENT_VERSION) {
+            setShowConsentFlow(true);
+            setIsLoading(false);
+            return;
+          }
+          
+          // Regular user: Check school
           if (data.school_id) {
             setCurrentSchoolId(data.school_id);
-          } else if (email === SUPER_ADMIN_EMAIL || data.role === ROLES.SUPER_ADMIN) {
-            setCurrentSchoolId('COMMAND_CENTER');
           } else {
             setShowSchoolPrompt(true);
           }
+          
         } else {
-          // Create new user document
+          // =====================
+          // NEW USER - First login
+          // =====================
+          
+          // Domain check for new users (SuperAdmins are already in DB)
+          if (domain !== ALLOWED_DOMAIN) {
+            await signOut(auth);
+            setToast?.({ message: 'Access restricted to @dadeschools.net accounts. Contact your administrator.', type: 'error' });
+            setIsLoading(false);
+            return;
+          }
+          
+          // Create new user document with teacher role
           const newUserData = {
             email,
             displayName: firebaseUser.displayName || '',
-            role: email === SUPER_ADMIN_EMAIL ? ROLES.SUPER_ADMIN : ROLES.TEACHER,
+            role: ROLES.TEACHER,
             employee_id: email.split('@')[0].toUpperCase(),
             school_id: null,
             created_at: serverTimestamp(),
             aup_accepted: false,
             aup_version: null,
+            camera_consent: false,
           };
+          
           await setDoc(userRef, newUserData);
           setUserData(newUserData);
           
-          if (email === SUPER_ADMIN_EMAIL) {
-            setCurrentSchoolId('COMMAND_CENTER');
-          } else {
-            setShowSchoolPrompt(true);
-          }
+          // New users always need consent flow
+          setShowConsentFlow(true);
         }
       } else {
         setUser(null);
@@ -162,6 +195,99 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
 
     return () => unsubscribe();
   }, [router, setUser, setToast]);
+
+  // =====================
+  // CONSENT COMPLETION HANDLER
+  // =====================
+  const handleConsentComplete = async (consentData) => {
+    if (!user?.uid) return;
+    
+    try {
+      const userRef = doc(db, COLLECTIONS.USERS, user.uid);
+      
+      // Validate school code
+      if (consentData.schoolCode && consentData.schoolCode !== 'SANDBOX') {
+        const schoolRef = doc(db, COLLECTIONS.SCHOOLS, consentData.schoolCode);
+        const schoolSnap = await getDoc(schoolRef);
+        
+        if (!schoolSnap.exists()) {
+          setToast?.({ message: 'Invalid school code. Please check with your administrator.', type: 'error' });
+          return;
+        }
+      }
+      
+      // Update user document
+      await updateDoc(userRef, {
+        aup_accepted: true,
+        aup_version: CONSENT_VERSION,
+        aup_accepted_at: serverTimestamp(),
+        camera_consent: true,
+        school_id: consentData.schoolCode === 'SANDBOX' ? null : consentData.schoolCode,
+      });
+      
+      // Update local state
+      setUserData(prev => ({
+        ...prev,
+        aup_accepted: true,
+        aup_version: CONSENT_VERSION,
+        camera_consent: true,
+        school_id: consentData.schoolCode === 'SANDBOX' ? null : consentData.schoolCode,
+      }));
+      
+      // Set school
+      if (consentData.schoolCode === 'SANDBOX') {
+        setCurrentSchoolId('SANDBOX');
+        setSandboxMode(true);
+      } else {
+        setCurrentSchoolId(consentData.schoolCode);
+      }
+      
+      setShowConsentFlow(false);
+      setShowSchoolPrompt(false);
+      setToast?.({ message: 'Welcome to STRIDE!', type: 'success' });
+      
+    } catch (err) {
+      console.error('Consent completion error:', err);
+      setToast?.({ message: 'Failed to save consent. Please try again.', type: 'error' });
+    }
+  };
+
+  // =====================
+  // SANDBOX MODE HANDLER
+  // =====================
+  const handleEnterSandbox = async () => {
+    if (!user?.uid) return;
+    
+    try {
+      const userRef = doc(db, COLLECTIONS.USERS, user.uid);
+      
+      // Update consent but don't set school_id
+      await updateDoc(userRef, {
+        aup_accepted: true,
+        aup_version: CONSENT_VERSION,
+        aup_accepted_at: serverTimestamp(),
+        camera_consent: true,
+        // school_id stays null for sandbox
+      });
+      
+      setUserData(prev => ({
+        ...prev,
+        aup_accepted: true,
+        aup_version: CONSENT_VERSION,
+        camera_consent: true,
+      }));
+      
+      setCurrentSchoolId('SANDBOX');
+      setSandboxMode(true);
+      setShowConsentFlow(false);
+      setShowSchoolPrompt(false);
+      setToast?.({ message: 'Welcome to Sandbox mode! Practice freely.', type: 'success' });
+      
+    } catch (err) {
+      console.error('Enter sandbox error:', err);
+      setToast?.({ message: 'Failed to enter sandbox. Please try again.', type: 'error' });
+    }
+  };
 
   // Cleanup subscriptions on unmount or school change
   const cleanupSubscriptions = useCallback(() => {
@@ -469,7 +595,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
       await setDoc(doc(configsRef, CONFIG_DOCS.KIOSK), DEFAULT_KIOSK);
       await setDoc(doc(configsRef, CONFIG_DOCS.SETTINGS), DEFAULT_SETTINGS);
 
-      setToast?.({ message: `School "${name}" created!`, type: 'success' });
+      setToast?.({ message: `School "${name}" created! Code: ${schoolId}`, type: 'success' });
       return schoolId;
     } catch (err) {
       console.error('Create school error:', err);
@@ -898,7 +1024,6 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     }
   };
 
-  // File Upload Handler
   // Handle file upload - accepts pre-parsed student data from AdminPanel
   const handleFileUpload = async (studentsData) => {
     if (!Array.isArray(studentsData) || studentsData.length === 0) {
@@ -907,7 +1032,6 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     }
 
     if (sandboxMode) {
-      // In sandbox, just add to local state
       const newStudents = studentsData.map((s, i) => ({
         ...s,
         id: `imported-${Date.now()}-${i}`,
@@ -921,7 +1045,6 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     try {
       setToast?.({ message: 'Uploading students...', type: 'info' });
       
-      // Use batched writes for efficiency (max 500 per batch)
       const batchSize = 500;
       let imported = 0;
       
@@ -930,7 +1053,6 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
         const chunk = studentsData.slice(i, i + batchSize);
         
         for (const student of chunk) {
-          // Check if student already exists by student_id_number
           const existingQuery = query(
             collection(db, studentsPath(currentSchoolId)),
             where('student_id_number', '==', student.student_id_number),
@@ -939,7 +1061,6 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
           const existingSnap = await getDocs(existingQuery);
           
           if (existingSnap.empty) {
-            // New student - create
             const studentRef = doc(collection(db, studentsPath(currentSchoolId)));
             batch.set(studentRef, {
               ...student,
@@ -947,7 +1068,6 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
             });
             imported++;
           } else {
-            // Existing student - update name and grade only (preserve scores)
             const existingDoc = existingSnap.docs[0];
             batch.update(existingDoc.ref, {
               full_name: student.full_name,
@@ -967,7 +1087,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     }
   };
 
-  // Box Queue Management - now actually performs the requested action
+  // Box Queue Management
   const resolveBoxQueueItem = async (itemId, approved, itemData = null) => {
     if (sandboxMode) {
       setBoxQueue(prev => prev.filter(i => i.id !== itemId));
@@ -976,7 +1096,6 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     }
 
     try {
-      // If approved, perform the requested action
       if (approved && itemData) {
         switch (itemData.type) {
           case 'ADD_DESTINATION':
@@ -1006,12 +1125,10 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
             }
             break;
           default:
-            // Unknown action type
             break;
         }
       }
       
-      // Delete the queue item
       await deleteDoc(doc(db, boxQueuePath(currentSchoolId), itemId));
       setToast?.({ message: approved ? 'Approved and applied' : 'Rejected', type: 'success' });
     } catch (err) {
@@ -1114,6 +1231,14 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     userGreeting,
     employeeId,
     signOutUser,
+
+    // Consent Flow
+    showConsentFlow,
+    setShowConsentFlow,
+    handleConsentComplete,
+    handleEnterSandbox,
+    needsConsent,
+    needsSchoolSelection,
 
     // School
     currentSchoolId,
