@@ -116,12 +116,25 @@ export default function ConsentFlow({
       return;
     }
 
-    // Pass the school code to parent for validation
+    // Build detailed consent record for audit trail
+    const timestamp = new Date().toISOString();
+    const consentDetails = {};
+    POLICY_SECTIONS.forEach(section => {
+      consentDetails[section.id] = {
+        accepted: consents[section.id] || false,
+        title: section.title,
+        timestamp: timestamp,
+      };
+    });
+
+    // Pass the school code and detailed consents to parent
     onComplete?.({
       consents,
+      consentDetails,
       consentVersion: CONSENT_VERSION,
       schoolCode: code,
-      consentedAt: new Date().toISOString(),
+      consentedAt: timestamp,
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
     });
   };
 
