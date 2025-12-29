@@ -197,7 +197,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   }, [router, setUser, setToast]);
 
   // =====================
-  // CONSENT COMPLETION HANDLER
+  // CONSENT COMPLETION HANDLER - Saves detailed records
   // =====================
   const handleConsentComplete = async (consentData) => {
     if (!user?.uid) return;
@@ -216,14 +216,43 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
         }
       }
       
-      // Update user document
+      // Update user document with detailed consent records
       await updateDoc(userRef, {
+        // Basic consent flags
         aup_accepted: true,
         aup_version: CONSENT_VERSION,
         aup_accepted_at: serverTimestamp(),
         camera_consent: true,
         school_id: consentData.schoolCode === 'SANDBOX' ? null : consentData.schoolCode,
+        
+        // Detailed consent record for audit
+        consent_details: consentData.consentDetails || {
+          aup: { accepted: true, timestamp: consentData.consentedAt },
+          camera: { accepted: true, timestamp: consentData.consentedAt },
+          ferpa: { accepted: true, timestamp: consentData.consentedAt },
+          liability: { accepted: true, timestamp: consentData.consentedAt },
+          data: { accepted: true, timestamp: consentData.consentedAt },
+        },
+        consent_user_agent: consentData.userAgent || 'unknown',
       });
+      
+      // Create immutable audit log entry in consent_logs collection
+      try {
+        await addDoc(collection(db, 'consent_logs'), {
+          uid: user.uid,
+          email: user.email,
+          action: 'CONSENT_ACCEPTED',
+          version: CONSENT_VERSION,
+          consents: consentData.consentDetails || consentData.consents,
+          school_code: consentData.schoolCode,
+          user_agent: consentData.userAgent || 'unknown',
+          ip_hint: 'client', // Actual IP would need server-side
+          ts: serverTimestamp(),
+        });
+      } catch (auditErr) {
+        // Don't block user if audit log fails, just log it
+        console.warn('Failed to create consent audit log:', auditErr);
+      }
       
       // Update local state
       setUserData(prev => ({
@@ -232,6 +261,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
         aup_version: CONSENT_VERSION,
         camera_consent: true,
         school_id: consentData.schoolCode === 'SANDBOX' ? null : consentData.schoolCode,
+        consent_details: consentData.consentDetails,
       }));
       
       // Set school
@@ -253,13 +283,14 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   };
 
   // =====================
-  // SANDBOX MODE HANDLER
+  // SANDBOX MODE HANDLER - Also creates audit record
   // =====================
   const handleEnterSandbox = async () => {
     if (!user?.uid) return;
     
     try {
       const userRef = doc(db, COLLECTIONS.USERS, user.uid);
+      const timestamp = new Date().toISOString();
       
       // Update consent but don't set school_id
       await updateDoc(userRef, {
@@ -268,7 +299,28 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
         aup_accepted_at: serverTimestamp(),
         camera_consent: true,
         // school_id stays null for sandbox
+        consent_details: {
+          aup: { accepted: true, timestamp },
+          camera: { accepted: true, timestamp },
+          ferpa: { accepted: true, timestamp },
+          liability: { accepted: true, timestamp },
+          data: { accepted: true, timestamp },
+        },
       });
+      
+      // Create audit log for sandbox entry
+      try {
+        await addDoc(collection(db, 'consent_logs'), {
+          uid: user.uid,
+          email: user.email,
+          action: 'CONSENT_ACCEPTED_SANDBOX',
+          version: CONSENT_VERSION,
+          school_code: 'SANDBOX',
+          ts: serverTimestamp(),
+        });
+      } catch (auditErr) {
+        console.warn('Failed to create sandbox consent audit log:', auditErr);
+      }
       
       setUserData(prev => ({
         ...prev,
