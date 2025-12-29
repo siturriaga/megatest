@@ -104,6 +104,106 @@ button, a, [role="button"] {
 }
 
 /* ========================================
+   FILM GRAIN OVERLAY (Premium Texture)
+   ======================================== */
+
+.film-grain {
+  position: relative;
+}
+
+.film-grain::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+/* Legacy noise (keeping for compatibility) */
+.bg-noise {
+  position: relative;
+}
+
+.bg-noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+/* ========================================
+   GLASSMORPHISM
+   ======================================== */
+
+.glass {
+  @apply relative overflow-hidden;
+  background: rgba(var(--card), 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.glass-card {
+  @apply rounded-2xl border transition-all duration-300;
+  background: rgb(var(--card) / var(--glass-opacity, 0.7));
+  border-color: rgb(var(--border));
+}
+
+[data-theme='aero'] .glass-card {
+  @apply bg-white/95 border-slate-200 shadow-lg shadow-slate-200/50;
+}
+
+[data-theme='aero'] .glass-card:hover {
+  @apply shadow-xl shadow-blue-100/50 -translate-y-0.5;
+}
+
+[data-theme='obsidian'] .glass-card {
+  @apply bg-slate-900/80 backdrop-blur-xl border-white/10 shadow-lg shadow-black/20;
+}
+
+[data-theme='obsidian'] .glass-card:hover {
+  @apply border-white/20 shadow-blue-500/5;
+}
+
+[data-theme='eclipse'] .glass-card {
+  @apply bg-zinc-950 border-2 border-zinc-800 shadow-none backdrop-blur-none;
+}
+
+[data-theme='eclipse'] .glass-card:hover {
+  @apply border-yellow-500/30;
+}
+
+/* Premium glassmorphism for modals and overlays */
+.glass-premium {
+  background: rgba(var(--card), 0.85);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 -20px 40px -20px rgba(255, 255, 255, 0.05) inset;
+}
+
+/* ========================================
    SAFE AREA INSETS (iPhone Notch Support)
    ======================================== */
 
@@ -148,54 +248,25 @@ button, a, [role="button"] {
 }
 
 /* ========================================
-   GLASS CARD - Theme Aware
+   ALERT LEVEL COLORS
    ======================================== */
 
-.glass-card {
-  @apply rounded-2xl border transition-all duration-300;
-  background: rgb(var(--card) / var(--glass-opacity, 0.7));
-  border-color: rgb(var(--border));
+.alert-normal {
+  --alert-color: 34 197 94;
+  --alert-bg: rgba(34, 197, 94, 0.1);
+  --alert-border: rgba(34, 197, 94, 0.3);
 }
 
-[data-theme='aero'] .glass-card {
-  @apply bg-white/95 border-slate-200 shadow-lg shadow-slate-200/50;
+.alert-hold {
+  --alert-color: 250 204 21;
+  --alert-bg: rgba(250, 204, 21, 0.1);
+  --alert-border: rgba(250, 204, 21, 0.3);
 }
 
-[data-theme='aero'] .glass-card:hover {
-  @apply shadow-xl shadow-blue-100/50 -translate-y-0.5;
-}
-
-[data-theme='obsidian'] .glass-card {
-  @apply bg-slate-900/80 backdrop-blur-xl border-white/10 shadow-lg shadow-black/20;
-}
-
-[data-theme='obsidian'] .glass-card:hover {
-  @apply border-white/20 shadow-blue-500/5;
-}
-
-[data-theme='eclipse'] .glass-card {
-  @apply bg-zinc-950 border-2 border-zinc-800 shadow-none backdrop-blur-none;
-}
-
-[data-theme='eclipse'] .glass-card:hover {
-  @apply border-yellow-500/30;
-}
-
-/* ========================================
-   ATMOSPHERIC NOISE TEXTURE (Film Grain)
-   ======================================== */
-
-.bg-noise {
-  position: relative;
-}
-
-.bg-noise::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+.alert-lockdown {
+  --alert-color: 239 68 68;
+  --alert-bg: rgba(239, 68, 68, 0.1);
+  --alert-border: rgba(239, 68, 68, 0.3);
 }
 
 /* ========================================
@@ -226,7 +297,6 @@ button, a, [role="button"] {
   animation: squish-land 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-/* Bounce with jelly physics */
 @keyframes jelly-bounce {
   0%, 100% {
     transform: scale(1, 1);
@@ -270,7 +340,7 @@ button, a, [role="button"] {
 }
 
 /* ========================================
-   PARTICLE SYSTEMS (Confetti)
+   PARTICLE SYSTEMS
    ======================================== */
 
 @keyframes particle {
@@ -295,6 +365,21 @@ button, a, [role="button"] {
   }
 }
 
+@keyframes coin-shower {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-40px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+  }
+}
+
 .animate-particle {
   animation: particle 0.8s ease-out forwards;
 }
@@ -303,10 +388,91 @@ button, a, [role="button"] {
   animation: confetti-fall 2s ease-out forwards;
 }
 
+.animate-coin-shower {
+  animation: coin-shower 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
 /* ========================================
-   STRIDEBOT TELEPORTATION
+   PORTAL PHYSICS (Bot entry/exit)
    ======================================== */
 
+@keyframes portal-in {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-180deg);
+    filter: blur(20px);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2) rotate(-90deg);
+    filter: blur(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: blur(0);
+  }
+}
+
+@keyframes portal-out {
+  0% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: blur(0);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.5) rotate(90deg);
+    filter: blur(5px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0) rotate(180deg);
+    filter: blur(20px);
+  }
+}
+
+.animate-portal-in {
+  animation: portal-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-portal-out {
+  animation: portal-out 0.4s ease-in forwards;
+}
+
+/* ========================================
+   STRIDEBOT ANIMATIONS
+   ======================================== */
+
+.stridebot-core {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stridebot-idle {
+  animation: stridebot-float 3s ease-in-out infinite;
+}
+
+@keyframes stridebot-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes reactive-levitate {
+  0%, 100% { 
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+  }
+  50% { 
+    transform: translateY(-8px) scale(1.02);
+    filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.15));
+  }
+}
+
+.animate-reactive-levitate {
+  animation: reactive-levitate 4s ease-in-out infinite;
+}
+
+/* Teleportation */
 @keyframes teleport-out {
   0% {
     opacity: 1;
@@ -382,32 +548,15 @@ button, a, [role="button"] {
   animation: slideDown 0.4s ease-out forwards;
 }
 
-/* ========== STRIDEBOT ANIMATIONS ========== */
-
-.stridebot-core {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.stridebot-idle {
-  animation: stridebot-float 3s ease-in-out infinite;
-}
-
-@keyframes stridebot-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
 /* ========================================
    HOUSE MASCOT ANIMATIONS
    ======================================== */
 
-/* Breathing */
 @keyframes breathe {
   0%, 100% { transform: scale(1) translateY(0); }
   50% { transform: scale(1.03) translateY(-2px); }
 }
 
-/* Celebration */
 @keyframes celebrate {
   0%, 100% { transform: scale(1) rotate(0deg); }
   25% { transform: scale(1.15) rotate(-5deg); }
@@ -415,31 +564,26 @@ button, a, [role="button"] {
   75% { transform: scale(1.15) rotate(5deg); }
 }
 
-/* Float for leading house */
 @keyframes float {
   0%, 100% { transform: translateY(0) scale(1.05); }
   50% { transform: translateY(-8px) scale(1.08); }
 }
 
-/* Points floating up */
 @keyframes pointsFloat {
   0% { opacity: 1; transform: translate(-50%, 0) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -30px) scale(1.5); }
 }
 
-/* Crown bobbing */
 @keyframes bob {
   0%, 100% { transform: translateX(-50%) translateY(0) rotate(-5deg); }
   50% { transform: translateX(-50%) translateY(-4px) rotate(5deg); }
 }
 
-/* Wing flapping */
 @keyframes wingFlap {
   0%, 100% { transform: scaleX(1) rotate(0deg); }
   50% { transform: scaleX(0.8) rotate(10deg); }
 }
 
-/* Flame flicker */
 @keyframes flicker {
   0%, 100% { transform: scaleY(1) translateY(0); opacity: 1; }
   25% { transform: scaleY(1.1) translateY(-1px); opacity: 0.9; }
@@ -447,26 +591,22 @@ button, a, [role="button"] {
   75% { transform: scaleY(1.05) translateY(-0.5px); opacity: 0.95; }
 }
 
-/* Ear twitch */
 @keyframes earTwitch {
   0%, 90%, 100% { transform: rotate(0deg); }
   93% { transform: rotate(-8deg); }
   96% { transform: rotate(5deg); }
 }
 
-/* Soaring wings */
 @keyframes soar {
   0%, 100% { transform: rotate(0deg) translateY(0); }
   50% { transform: rotate(-10deg) translateY(-3px); }
 }
 
-/* Feather ruffle */
 @keyframes ruffle {
   0%, 100% { transform: scaleX(1); }
   50% { transform: scaleX(1.1); }
 }
 
-/* Victory dance */
 @keyframes victoryDance {
   0% { transform: translateY(0) rotate(0deg); }
   10% { transform: translateY(-10px) rotate(-10deg); }
@@ -478,13 +618,27 @@ button, a, [role="button"] {
   100% { transform: translateY(0) rotate(0deg); }
 }
 
-/* Heartbeat */
 @keyframes heartbeat {
   0%, 100% { transform: scale(1); }
   14% { transform: scale(1.15); }
   28% { transform: scale(1); }
   42% { transform: scale(1.15); }
   70% { transform: scale(1); }
+}
+
+/* Damage/hit reaction */
+@keyframes damage-hit {
+  0% { transform: translateX(0); }
+  10% { transform: translateX(-10px) rotate(-5deg); }
+  20% { transform: translateX(8px) rotate(3deg); }
+  30% { transform: translateX(-6px) rotate(-2deg); }
+  40% { transform: translateX(4px) rotate(1deg); }
+  50% { transform: translateX(-2px); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+.animate-damage-hit {
+  animation: damage-hit 0.5s ease-out;
 }
 
 /* ========================================
@@ -509,6 +663,48 @@ button, a, [role="button"] {
   animation: siren-flash 0.5s ease-in-out infinite;
 }
 
+@keyframes screen-shake {
+  0%, 100% { transform: translateX(0); }
+  10% { transform: translateX(-5px); }
+  20% { transform: translateX(5px); }
+  30% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  50% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+  70% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+  90% { transform: translateX(-1px); }
+}
+
+.animate-screen-shake {
+  animation: screen-shake 0.5s ease-out;
+}
+
+/* ========================================
+   HOLOGRAPHIC TILT EFFECT (Mascot cards)
+   ======================================== */
+
+.holographic-card {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+}
+
+.holographic-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    var(--holo-angle, 45deg),
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 45%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0.1) 55%,
+    transparent 100%
+  );
+  pointer-events: none;
+  border-radius: inherit;
+}
+
 /* ========================================
    FORM ELEMENTS
    ======================================== */
@@ -517,12 +713,10 @@ input:focus, select:focus, textarea:focus {
   @apply outline-none ring-2 ring-primary/50;
 }
 
-/* Button press effect */
 .btn-press {
   @apply active:scale-95 transition-transform;
 }
 
-/* Text helpers */
 .text-muted {
   color: rgb(var(--muted-foreground));
 }
@@ -545,17 +739,40 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 40px rgba(var(--primary), 0.3);
 }
 
+/* Spotlight effect for guide mode */
+.spotlight {
+  position: relative;
+}
+
+.spotlight::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--spotlight-angle, 0deg),
+    transparent 0deg,
+    rgba(var(--primary), 0.3) 60deg,
+    transparent 120deg
+  );
+  animation: spotlight-rotate 3s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spotlight-rotate {
+  from { --spotlight-angle: 0deg; }
+  to { --spotlight-angle: 360deg; }
+}
+
 /* ========================================
    PRINT STYLES
    ======================================== */
 
 @media print {
-  /* Hide everything by default */
   body * {
     visibility: hidden;
   }
   
-  /* Show only printable content */
   .printable-doc, .printable-doc * {
     visibility: visible !important;
     display: block !important;
@@ -570,8 +787,7 @@ input:focus, select:focus, textarea:focus {
     color: black !important;
   }
   
-  /* Hide navigation, StrideBot, etc */
-  header, nav, footer, .stridebot-core, .glass-card {
+  header, nav, footer, .stridebot-core, .film-grain::before {
     display: none !important;
   }
 }
@@ -593,13 +809,36 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
-/* Selection color */
 ::selection {
   background: rgb(var(--primary) / 0.3);
   color: rgb(var(--foreground));
 }
 
-/* Focus visible for accessibility */
 :focus-visible {
   @apply outline-2 outline-offset-2 outline-primary;
+}
+
+/* ========================================
+   MOBILE RESPONSIVE UTILITIES
+   ======================================== */
+
+@media (max-width: 768px) {
+  .mobile-nav {
+    @apply fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-xl border-t border-border;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  
+  .mobile-hidden {
+    @apply hidden;
+  }
+  
+  .mobile-full {
+    @apply w-full;
+  }
+}
+
+@media (min-width: 769px) {
+  .desktop-hidden {
+    @apply hidden;
+  }
 }
