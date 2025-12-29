@@ -992,6 +992,143 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     return report;
   };
 
+  // =====================
+  // SUPERADMIN FUNCTIONS
+  // =====================
+
+  // Global lockdown - affects ALL schools
+  const globalLockdown = async (activate) => {
+    if (!isSuperAdmin) {
+      setToast?.({ message: 'SuperAdmin access required', type: 'error' });
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      
+      for (const school of allSchools) {
+        const schoolRef = doc(db, COLLECTIONS.SCHOOLS, school.id);
+        batch.update(schoolRef, {
+          lockdown: activate,
+          lockdownMeta: activate 
+            ? { activatedBy: user?.email, activatedAt: serverTimestamp(), global: true }
+            : null,
+        });
+      }
+      
+      await batch.commit();
+      
+      // Log the global lockdown action
+      await addDoc(collection(db, 'admin_logs'), {
+        action: activate ? 'GLOBAL_LOCKDOWN_ACTIVATED' : 'GLOBAL_LOCKDOWN_LIFTED',
+        performedBy: user?.email,
+        affectedSchools: allSchools.map(s => s.id),
+        timestamp: serverTimestamp(),
+      });
+
+      setToast?.({ 
+        message: activate 
+          ? `🚨 GLOBAL LOCKDOWN: ${allSchools.length} schools locked` 
+          : `Lockdown lifted for ${allSchools.length} schools`, 
+        type: activate ? 'error' : 'success' 
+      });
+    } catch (err) {
+      console.error('Global lockdown error:', err);
+      setToast?.({ message: 'Failed to execute global lockdown', type: 'error' });
+    }
+  };
+
+  // School-specific lockdown (from Command Center)
+  const schoolLockdown = async (schoolId, activate) => {
+    if (!isSuperAdmin) {
+      setToast?.({ message: 'SuperAdmin access required', type: 'error' });
+      return;
+    }
+
+    try {
+      const schoolRef = doc(db, COLLECTIONS.SCHOOLS, schoolId);
+      await updateDoc(schoolRef, {
+        lockdown: activate,
+        lockdownMeta: activate 
+          ? { activatedBy: user?.email, activatedAt: serverTimestamp() }
+          : null,
+      });
+
+      const school = allSchools.find(s => s.id === schoolId);
+      setToast?.({ 
+        message: activate 
+          ? `🚨 ${school?.name || schoolId} locked down` 
+          : `${school?.name || schoolId} lockdown lifted`, 
+        type: activate ? 'error' : 'success' 
+      });
+    } catch (err) {
+      console.error('School lockdown error:', err);
+      setToast?.({ message: 'Failed to toggle school lockdown', type: 'error' });
+    }
+  };
+
+  // Global broadcast - sends to ALL schools
+  const globalBroadcast = async (message, priority = 'normal') => {
+    if (!isSuperAdmin) {
+      setToast?.({ message: 'SuperAdmin access required', type: 'error' });
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      
+      for (const school of allSchools) {
+        const broadcastRef = doc(collection(db, broadcastsPath(school.id)));
+        batch.set(broadcastRef, {
+          message: sanitizeText(message),
+          priority,
+          sender: user?.email,
+          senderName: userGreeting.fullName,
+          isGlobal: true,
+          createdAt: serverTimestamp(),
+          pinned: priority === 'urgent',
+        });
+      }
+      
+      await batch.commit();
+
+      setToast?.({ 
+        message: `Broadcast sent to ${allSchools.length} schools`, 
+        type: 'success' 
+      });
+    } catch (err) {
+      console.error('Global broadcast error:', err);
+      setToast?.({ message: 'Failed to send global broadcast', type: 'error' });
+    }
+  };
+
+  // Delete a school (SuperAdmin only)
+  const deleteSchool = async (schoolId) => {
+    if (!isSuperAdmin) {
+      setToast?.({ message: 'SuperAdmin access required', type: 'error' });
+      return false;
+    }
+
+    if (schoolId === currentSchoolId) {
+      setToast?.({ message: 'Cannot delete currently active school', type: 'error' });
+      return false;
+    }
+
+    try {
+      // Note: This only deletes the school document, not subcollections
+      // In production, use a Cloud Function to recursively delete
+      const schoolRef = doc(db, COLLECTIONS.SCHOOLS, schoolId);
+      await deleteDoc(schoolRef);
+
+      setToast?.({ message: 'School deleted', type: 'success' });
+      return true;
+    } catch (err) {
+      console.error('Delete school error:', err);
+      setToast?.({ message: 'Failed to delete school', type: 'error' });
+      return false;
+    }
+  };
+
   // Conflict Group Management
   const addConflictGroup = async (name, members) => {
     if (sandboxMode) {
@@ -1337,6 +1474,12 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     lockdownMeta,
     toggleLockdown,
     generateLockdownReport,
+
+    // SuperAdmin Functions
+    globalLockdown,
+    schoolLockdown,
+    globalBroadcast,
+    deleteSchool,
 
     // Actions
     issuePass,
