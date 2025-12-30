@@ -4,6 +4,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========================================
+   THEME VARIABLES & SETUP
+   ======================================== */
 @layer base {
   :root {
     --background: 255 255 255;
@@ -18,6 +21,7 @@
     --glass-border: 255 255 255;
     --glass-opacity: 0.7;
     --muted-foreground: 100 116 139;
+    --shadow-color: 0 0 0;
   }
 
   /* AERO THEME - Light, Clean, Airy */
@@ -75,7 +79,6 @@
 /* ========================================
    BASE STYLES
    ======================================== */
-
 * {
   -webkit-tap-highlight-color: transparent;
 }
@@ -103,11 +106,295 @@ button, a, [role="button"] {
   min-width: 32px;
 }
 
+/* ==========================================
+   STRIDE MASCOT & HOUSE ANIMATIONS (NEW)
+   Includes: Phoenix, Wolf, Hawk, Panther, 
+   Dragon, Lion, Bear, Tiger, Owl, Shark, Bull, Falcon
+   ========================================== */
+
+/* BREATHING */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+@keyframes breathe-intense {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+.animate-breathe-intense {
+  animation: breathe-intense 1.5s ease-in-out infinite;
+}
+
+/* BLINKING */
+@keyframes blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+
+.animate-blink {
+  animation: blink 4s ease-in-out infinite;
+}
+
+/* FLAME (Phoenix, Dragon, Bull) */
+@keyframes flame {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.7; }
+  50% { transform: translateY(-3px) scale(1.05); opacity: 0.9; }
+}
+
+@keyframes flame-intense {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.8; }
+  25% { transform: translateY(-6px) scale(1.12); opacity: 1; }
+  50% { transform: translateY(-2px) scale(1.05); opacity: 0.9; }
+  75% { transform: translateY(-8px) scale(1.15); opacity: 1; }
+}
+
+.animate-flame {
+  animation: flame 1.5s ease-in-out infinite;
+}
+
+.animate-flame-intense {
+  animation: flame-intense 0.5s ease-in-out infinite;
+}
+
+/* WINGS (Hawk, Phoenix, Owl, Falcon) */
+@keyframes wing-flap {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-15deg); }
+  75% { transform: rotate(15deg); }
+}
+
+@keyframes wing-flap-fast {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-25deg); }
+  75% { transform: rotate(25deg); }
+}
+
+.animate-wing-flap {
+  animation: wing-flap 0.3s ease-in-out infinite;
+}
+
+.animate-wing-flap-fast {
+  animation: wing-flap-fast 0.2s ease-in-out infinite;
+}
+
+/* TAIL WAGGING (Wolf, Panther, Tiger, Lion, Shark) */
+@keyframes wag {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(10deg); }
+}
+
+@keyframes wag-fast {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(18deg); }
+  75% { transform: rotate(-18deg); }
+}
+
+.animate-wag {
+  animation: wag 2s ease-in-out infinite;
+}
+
+.animate-wag-fast {
+  animation: wag-fast 0.3s ease-in-out infinite;
+}
+
+/* EAR TWITCH (Wolf, Tiger) */
+@keyframes ear-twitch {
+  0%, 90%, 100% { transform: rotate(0deg); }
+  95% { transform: rotate(6deg); }
+}
+
+.animate-ear-twitch {
+  animation: ear-twitch 5s ease-in-out infinite;
+}
+
+/* BOBBING (Crown, badges) */
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes bob-slow {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-5px) rotate(2deg); }
+}
+
+.animate-bob {
+  animation: bob 2s ease-in-out infinite;
+}
+
+.animate-bob-slow {
+  animation: bob-slow 3s ease-in-out infinite;
+}
+
+/* CELEBRATION EFFECTS */
+@keyframes celebrate-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-12px) scale(1.1); }
+}
+
+@keyframes celebrate-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes celebrate-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.85; }
+}
+
+.animate-celebrate-bounce {
+  animation: celebrate-bounce 0.5s ease-in-out;
+}
+
+.animate-celebrate-spin {
+  animation: celebrate-spin 1s linear;
+}
+
+.animate-celebrate-pulse {
+  animation: celebrate-pulse 1s ease-in-out infinite;
+}
+
+/* BATTLE ENTRANCE & EXIT */
+@keyframes battle-entrance {
+  0% { transform: scale(0) translateY(100px) rotate(-180deg); opacity: 0; }
+  100% { transform: scale(1) translateY(0) rotate(0deg); opacity: 1; }
+}
+
+@keyframes battle-attack {
+  0% { transform: scale(1) translateX(0); }
+  50% { transform: scale(1.3) translateX(50px); }
+  100% { transform: scale(1) translateX(0); }
+}
+
+@keyframes battle-defeat {
+  0% { transform: scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: scale(0) rotate(720deg) translateY(-150px); opacity: 0; }
+}
+
+@keyframes battle-victory {
+  0%, 100% { transform: scale(1); }
+  25% { transform: scale(1.15) rotate(-5deg); }
+  50% { transform: scale(1.25); }
+  75% { transform: scale(1.15) rotate(5deg); }
+}
+
+.animate-battle-entrance {
+  animation: battle-entrance 0.6s ease-out;
+}
+
+.animate-battle-attack {
+  animation: battle-attack 0.4s ease-in-out;
+}
+
+.animate-battle-defeat {
+  animation: battle-defeat 0.6s ease-in forwards;
+}
+
+.animate-battle-victory {
+  animation: battle-victory 2s ease-in-out infinite;
+}
+
+/* ENERGY PARTICLES */
+@keyframes energy-particle {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(-200px); opacity: 0; }
+}
+
+.animate-energy-particle {
+  animation: energy-particle 2s ease-out forwards;
+}
+
+/* SHOCKWAVE */
+@keyframes shockwave {
+  0% { transform: scale(0); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+.animate-shockwave {
+  animation: shockwave 0.5s ease-out forwards;
+}
+
+/* CONFETTI */
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(400px) rotate(720deg); opacity: 0; }
+}
+
+.animate-confetti {
+  animation: confetti-fall 3s ease-out forwards;
+}
+
+/* POINTS FLOATING */
+@keyframes points-float {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-60px) scale(1.5); opacity: 0; }
+}
+
+.animate-points-float {
+  animation: points-float 0.8s ease-out forwards;
+}
+
+/* DAMAGE SHAKE */
+@keyframes damage-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-10px); }
+  40% { transform: translateX(10px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+.animate-damage-shake {
+  animation: damage-shake 0.3s ease-in-out;
+}
+
+/* PROGRESS BAR SHIMMER */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s linear infinite;
+}
+
+/* GLOW EFFECTS */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px var(--glow-color, rgba(99, 102, 241, 0.5)); }
+  50% { box-shadow: 0 0 40px var(--glow-color, rgba(99, 102, 241, 0.8)); }
+}
+
+.animate-glow {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* HOUSE CARD LEADER */
+.leading-house {
+  box-shadow: 0 0 30px var(--house-color, #f59e0b);
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* HOUSE CARD HOVER */
+.house-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.house-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
 /* ========================================
-   FILM GRAIN OVERLAY (Phase 0E)
-   Premium tactile texture across entire app
+   GLOBAL UI EFFECTS
    ======================================== */
 
+/* FILM GRAIN OVERLAY */
 .film-grain {
   position: relative;
 }
@@ -123,11 +410,7 @@ button, a, [role="button"] {
   mix-blend-mode: overlay;
 }
 
-/* ========================================
-   GLASSMORPHISM (Phase 0G)
-   Modern glass effect for all new elements
-   ======================================== */
-
+/* GLASSMORPHISM */
 .glass {
   @apply relative overflow-hidden;
   background: rgba(var(--card), 0.6);
@@ -179,34 +462,7 @@ button, a, [role="button"] {
   @apply border-yellow-500/30;
 }
 
-/* Premium glassmorphism for modals and overlays */
-.glass-premium {
-  background: rgba(var(--card), 0.85);
-  backdrop-filter: blur(40px) saturate(200%);
-  -webkit-backdrop-filter: blur(40px) saturate(200%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 
-    0 25px 50px -12px rgba(0, 0, 0, 0.25),
-    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
-    0 -20px 40px -20px rgba(255, 255, 255, 0.05) inset;
-}
-
-/* ========================================
-   SAFE AREA INSETS (iPhone Notch Support)
-   ======================================== */
-
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-.safe-top {
-  padding-top: env(safe-area-inset-top, 0px);
-}
-
-/* ========================================
-   HIDDEN SCROLLBARS (Native App Feel)
-   ======================================== */
-
+/* HIDDEN SCROLLBARS */
 .scrollbar-hidden {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -216,7 +472,6 @@ button, a, [role="button"] {
   display: none;
 }
 
-/* Thin scrollbar for when visible */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -236,201 +491,7 @@ button, a, [role="button"] {
 }
 
 /* ========================================
-   ALERT LEVEL COLORS
-   ======================================== */
-
-.alert-normal {
-  --alert-color: 34 197 94; /* green */
-  --alert-bg: rgba(34, 197, 94, 0.1);
-  --alert-border: rgba(34, 197, 94, 0.3);
-}
-
-.alert-hold {
-  --alert-color: 250 204 21; /* yellow */
-  --alert-bg: rgba(250, 204, 21, 0.1);
-  --alert-border: rgba(250, 204, 21, 0.3);
-}
-
-.alert-lockdown {
-  --alert-color: 239 68 68; /* red */
-  --alert-bg: rgba(239, 68, 68, 0.1);
-  --alert-border: rgba(239, 68, 68, 0.3);
-}
-
-/* ========================================
-   SQUASH & STRETCH PHYSICS ANIMATIONS
-   ======================================== */
-
-@keyframes squish-land {
-  0% {
-    transform: scale(0.8, 0.8);
-    opacity: 0;
-  }
-  40% {
-    transform: scale(1.25, 0.75);
-    opacity: 1;
-  }
-  60% {
-    transform: scale(0.85, 1.15);
-  }
-  80% {
-    transform: scale(1.05, 0.95);
-  }
-  100% {
-    transform: scale(1, 1);
-  }
-}
-
-.animate-squish-land {
-  animation: squish-land 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-/* Bounce with jelly physics */
-@keyframes jelly-bounce {
-  0%, 100% {
-    transform: scale(1, 1);
-  }
-  25% {
-    transform: scale(0.95, 1.05);
-  }
-  50% {
-    transform: scale(1.05, 0.95);
-  }
-  75% {
-    transform: scale(0.98, 1.02);
-  }
-}
-
-.animate-jelly {
-  animation: jelly-bounce 0.6s ease-in-out;
-}
-
-/* ========================================
-   MICRO-SACCADES (Eye Jitter)
-   ======================================== */
-
-@keyframes saccade {
-  0%, 100% {
-    transform: translate(0, 0);
-  }
-  25% {
-    transform: translate(0.5px, -0.5px);
-  }
-  50% {
-    transform: translate(-0.5px, 0.5px);
-  }
-  75% {
-    transform: translate(0.5px, 0.5px);
-  }
-}
-
-.animate-saccade {
-  animation: saccade 3s ease-in-out infinite;
-}
-
-/* ========================================
-   PARTICLE SYSTEMS
-   ======================================== */
-
-@keyframes particle {
-  0% {
-    opacity: 1;
-    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(60px) scale(0);
-  }
-}
-
-@keyframes confetti-fall {
-  0% {
-    transform: translateY(-10px) rotate(0deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(100px) rotate(720deg);
-    opacity: 0;
-  }
-}
-
-@keyframes coin-shower {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-40px) scale(1.2);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(20px) scale(0.8);
-  }
-}
-
-.animate-particle {
-  animation: particle 0.8s ease-out forwards;
-}
-
-.animate-confetti {
-  animation: confetti-fall 2s ease-out forwards;
-}
-
-.animate-coin-shower {
-  animation: coin-shower 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-/* ========================================
-   PORTAL PHYSICS (Bot entry/exit)
-   ======================================== */
-
-@keyframes portal-in {
-  0% {
-    opacity: 0;
-    transform: scale(0) rotate(-180deg);
-    filter: blur(20px);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.2) rotate(-90deg);
-    filter: blur(5px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-    filter: blur(0);
-  }
-}
-
-@keyframes portal-out {
-  0% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-    filter: blur(0);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(0.5) rotate(90deg);
-    filter: blur(5px);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0) rotate(180deg);
-    filter: blur(20px);
-  }
-}
-
-.animate-portal-in {
-  animation: portal-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-.animate-portal-out {
-  animation: portal-out 0.4s ease-in forwards;
-}
-
-/* ========================================
-   STRIDEBOT ANIMATIONS
+   STRIDEBOT & SYSTEM ANIMATIONS
    ======================================== */
 
 .stridebot-core {
@@ -446,7 +507,6 @@ button, a, [role="button"] {
   50% { transform: translateY(-4px); }
 }
 
-/* Reactive levitation - responds to proximity */
 @keyframes reactive-levitate {
   0%, 100% { 
     transform: translateY(0) scale(1);
@@ -462,190 +522,44 @@ button, a, [role="button"] {
   animation: reactive-levitate 4s ease-in-out infinite;
 }
 
-/* Legacy teleportation - keeping for compatibility */
-@keyframes teleport-out {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(0.8);
-    filter: blur(4px);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.5);
-    filter: blur(8px);
-  }
+/* SQUASH & STRETCH */
+@keyframes squish-land {
+  0% { transform: scale(0.8, 0.8); opacity: 0; }
+  40% { transform: scale(1.25, 0.75); opacity: 1; }
+  60% { transform: scale(0.85, 1.15); }
+  80% { transform: scale(1.05, 0.95); }
+  100% { transform: scale(1, 1); }
 }
 
-@keyframes teleport-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.5);
-    filter: blur(8px);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.1);
-    filter: blur(2px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
-  }
+.animate-squish-land {
+  animation: squish-land 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-.animate-teleport-out {
-  animation: teleport-out 0.4s ease-in forwards;
+/* PORTAL */
+@keyframes portal-in {
+  0% { opacity: 0; transform: scale(0) rotate(-180deg); filter: blur(20px); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); filter: blur(0); }
 }
 
-.animate-teleport-in {
-  animation: teleport-in 0.4s ease-out forwards;
+.animate-portal-in {
+  animation: portal-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 /* ========================================
-   BASIC ANIMATIONS
+   ALERT LEVEL COLORS
    ======================================== */
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+.alert-normal {
+  --alert-color: 34 197 94; 
+  --alert-bg: rgba(34, 197, 94, 0.1);
 }
-
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-out forwards;
+.alert-hold {
+  --alert-color: 250 204 21; 
+  --alert-bg: rgba(250, 204, 21, 0.1);
 }
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+.alert-lockdown {
+  --alert-color: 239 68 68; 
+  --alert-bg: rgba(239, 68, 68, 0.1);
 }
-
-.animate-slideUp {
-  animation: slideUp 0.4s ease-out forwards;
-}
-
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-slideDown {
-  animation: slideDown 0.4s ease-out forwards;
-}
-
-/* ========================================
-   HOUSE MASCOT ANIMATIONS
-   ======================================== */
-
-/* Breathing */
-@keyframes breathe {
-  0%, 100% { transform: scale(1) translateY(0); }
-  50% { transform: scale(1.03) translateY(-2px); }
-}
-
-/* Celebration */
-@keyframes celebrate {
-  0%, 100% { transform: scale(1) rotate(0deg); }
-  25% { transform: scale(1.15) rotate(-5deg); }
-  50% { transform: scale(1.1) rotate(0deg); }
-  75% { transform: scale(1.15) rotate(5deg); }
-}
-
-/* Float for leading house */
-@keyframes float {
-  0%, 100% { transform: translateY(0) scale(1.05); }
-  50% { transform: translateY(-8px) scale(1.08); }
-}
-
-/* Points floating up */
-@keyframes pointsFloat {
-  0% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -30px) scale(1.5); }
-}
-
-/* Crown bobbing */
-@keyframes bob {
-  0%, 100% { transform: translateX(-50%) translateY(0) rotate(-5deg); }
-  50% { transform: translateX(-50%) translateY(-4px) rotate(5deg); }
-}
-
-/* Wing flapping */
-@keyframes wingFlap {
-  0%, 100% { transform: scaleX(1) rotate(0deg); }
-  50% { transform: scaleX(0.8) rotate(10deg); }
-}
-
-/* Flame flicker */
-@keyframes flicker {
-  0%, 100% { transform: scaleY(1) translateY(0); opacity: 1; }
-  25% { transform: scaleY(1.1) translateY(-1px); opacity: 0.9; }
-  50% { transform: scaleY(0.95) translateY(1px); opacity: 1; }
-  75% { transform: scaleY(1.05) translateY(-0.5px); opacity: 0.95; }
-}
-
-/* Ear twitch */
-@keyframes earTwitch {
-  0%, 90%, 100% { transform: rotate(0deg); }
-  93% { transform: rotate(-8deg); }
-  96% { transform: rotate(5deg); }
-}
-
-/* Soaring wings */
-@keyframes soar {
-  0%, 100% { transform: rotate(0deg) translateY(0); }
-  50% { transform: rotate(-10deg) translateY(-3px); }
-}
-
-/* Feather ruffle */
-@keyframes ruffle {
-  0%, 100% { transform: scaleX(1); }
-  50% { transform: scaleX(1.1); }
-}
-
-/* Victory dance */
-@keyframes victoryDance {
-  0% { transform: translateY(0) rotate(0deg); }
-  10% { transform: translateY(-10px) rotate(-10deg); }
-  20% { transform: translateY(0) rotate(0deg); }
-  30% { transform: translateY(-10px) rotate(10deg); }
-  40% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-15px) scale(1.1); }
-  60% { transform: translateY(0) scale(1); }
-  100% { transform: translateY(0) rotate(0deg); }
-}
-
-/* Heartbeat */
-@keyframes heartbeat {
-  0%, 100% { transform: scale(1); }
-  14% { transform: scale(1.15); }
-  28% { transform: scale(1); }
-  42% { transform: scale(1.15); }
-  70% { transform: scale(1); }
-}
-
-/* Damage/hit reaction */
-@keyframes damage-hit {
-  0% { transform: translateX(0); }
-  10% { transform: translateX(-10px) rotate(-5deg); }
-  20% { transform: translateX(8px) rotate(3deg); }
-  30% { transform: translateX(-6px) rotate(-2deg); }
-  40% { transform: translateX(4px) rotate(1deg); }
-  50% { transform: translateX(-2px); }
-  100% { transform: translateX(0) rotate(0deg); }
-}
-
-.animate-damage-hit {
-  animation: damage-hit 0.5s ease-out;
-}
-
-/* ========================================
-   LOCKDOWN ANIMATIONS
-   ======================================== */
 
 @keyframes lockdown-pulse {
   0%, 100% { opacity: 1; }
@@ -656,199 +570,28 @@ button, a, [role="button"] {
   animation: lockdown-pulse 1s ease-in-out infinite;
 }
 
-@keyframes siren-flash {
-  0%, 100% { background-color: rgba(239, 68, 68, 0.8); }
-  50% { background-color: rgba(239, 68, 68, 0.4); }
-}
-
-.animate-siren {
-  animation: siren-flash 0.5s ease-in-out infinite;
-}
-
-/* Screen shake */
-@keyframes screen-shake {
-  0%, 100% { transform: translateX(0); }
-  10% { transform: translateX(-5px); }
-  20% { transform: translateX(5px); }
-  30% { transform: translateX(-4px); }
-  40% { transform: translateX(4px); }
-  50% { transform: translateX(-3px); }
-  60% { transform: translateX(3px); }
-  70% { transform: translateX(-2px); }
-  80% { transform: translateX(2px); }
-  90% { transform: translateX(-1px); }
-}
-
-.animate-screen-shake {
-  animation: screen-shake 0.5s ease-out;
-}
-
 /* ========================================
-   HOLOGRAPHIC TILT EFFECT (Mascot cards)
-   ======================================== */
-
-.holographic-card {
-  perspective: 1000px;
-  transform-style: preserve-3d;
-}
-
-.holographic-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    var(--holo-angle, 45deg),
-    transparent 0%,
-    rgba(255, 255, 255, 0.1) 45%,
-    rgba(255, 255, 255, 0.2) 50%,
-    rgba(255, 255, 255, 0.1) 55%,
-    transparent 100%
-  );
-  pointer-events: none;
-  border-radius: inherit;
-}
-
-/* ========================================
-   FORM ELEMENTS
+   UTILITIES
    ======================================== */
 
 input:focus, select:focus, textarea:focus {
   @apply outline-none ring-2 ring-primary/50;
 }
 
-/* Button press effect */
 .btn-press {
   @apply active:scale-95 transition-transform;
 }
 
-/* Text helpers */
-.text-muted {
-  color: rgb(var(--muted-foreground));
-}
-
-/* ========================================
-   PREMIUM EFFECTS
-   ======================================== */
-
-.premium-shadow {
-  box-shadow: 
-    0 4px 6px -1px rgba(var(--shadow-color, 0 0 0), 0.1),
-    0 2px 4px -2px rgba(var(--shadow-color, 0 0 0), 0.1);
-}
-
-.glow {
-  box-shadow: 0 0 20px rgba(var(--primary), 0.3);
-}
-
-.glow-lg {
-  box-shadow: 0 0 40px rgba(var(--primary), 0.3);
-}
-
-/* Spotlight effect for guide mode */
-.spotlight {
-  position: relative;
-}
-
-.spotlight::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: inherit;
-  background: conic-gradient(
-    from var(--spotlight-angle, 0deg),
-    transparent 0deg,
-    rgba(var(--primary), 0.3) 60deg,
-    transparent 120deg
-  );
-  animation: spotlight-rotate 3s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes spotlight-rotate {
-  from { --spotlight-angle: 0deg; }
-  to { --spotlight-angle: 360deg; }
-}
-
-/* ========================================
-   PRINT STYLES
-   ======================================== */
-
 @media print {
-  /* Hide everything by default */
-  body * {
-    visibility: hidden;
-  }
-  
-  /* Show only printable content */
+  body * { visibility: hidden; }
   .printable-doc, .printable-doc * {
     visibility: visible !important;
     display: block !important;
   }
-  
   .printable-doc {
     position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+    left: 0; top: 0; width: 100%;
     background: white !important;
     color: black !important;
-  }
-  
-  /* Hide navigation, StrideBot, etc */
-  header, nav, footer, .stridebot-core, .film-grain::before {
-    display: none !important;
-  }
-}
-
-/* ========================================
-   UTILITY CLASSES
-   ======================================== */
-
-.no-print {
-  @media print {
-    display: none !important;
-  }
-}
-
-.print-only {
-  display: none !important;
-  @media print {
-    display: block !important;
-  }
-}
-
-/* Selection color */
-::selection {
-  background: rgb(var(--primary) / 0.3);
-  color: rgb(var(--foreground));
-}
-
-/* Focus visible for accessibility */
-:focus-visible {
-  @apply outline-2 outline-offset-2 outline-primary;
-}
-
-/* ========================================
-   MOBILE RESPONSIVE UTILITIES
-   ======================================== */
-
-@media (max-width: 768px) {
-  .mobile-nav {
-    @apply fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-xl border-t border-border;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  
-  .mobile-hidden {
-    @apply hidden;
-  }
-  
-  .mobile-full {
-    @apply w-full;
-  }
-}
-
-@media (min-width: 769px) {
-  .desktop-hidden {
-    @apply hidden;
   }
 }
