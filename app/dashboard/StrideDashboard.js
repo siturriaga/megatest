@@ -15,6 +15,7 @@ import StudentRosterUpload from './components/StudentRosterUpload';
 import IncentivesPanel from './components/IncentivesPanel';
 import HallPassQRSetup from './components/HallPassQRSetup';
 import StudentHouseAssignment from './components/StudentHouseAssignment';
+import SafetyPanel from './components/SafetyPanel';
 // Note: We keep simple sections inline, but swap complex ones for components
 
 /**
@@ -70,7 +71,11 @@ export default function StrideDashboard({
   // State
   lockdown, theme, onThemeChange, showSchoolPrompt, onJoinSchool,
   // New Hook Actions
-  onAssignStudent, onBulkAssign, onUpdateHouseName, botRef
+  onAssignStudent, onBulkAssign, onUpdateHouseName, botRef,
+  // Safety Features
+  alertLevel, onSetAlertLevel, lockedZones, onToggleZoneLock,
+  // Conflict Groups
+  conflictGroups = [], onAddConflictGroup, onRemoveConflictGroup,
 }) {
   const [activeSection, setActiveSection] = useState('hallpass');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -221,6 +226,29 @@ export default function StrideDashboard({
           </div>
         );
 
+      // --- SAFETY PANEL ---
+      case 'safety':
+        return (
+          <SafetyPanel
+            conflictGroups={conflictGroups}
+            allStudents={allStudents}
+            activePasses={activePasses}
+            onAddConflictGroup={onAddConflictGroup}
+            onRemoveConflictGroup={onRemoveConflictGroup}
+            lockdown={lockdown}
+            onToggleLockdown={onToggleLockdown}
+            alertLevel={alertLevel}
+            onSetAlertLevel={onSetAlertLevel}
+            lockedZones={lockedZones}
+            onToggleZoneLock={onToggleZoneLock}
+            passDestinations={labelsConfig?.passDestinations || []}
+            isSchoolAdmin={isSchoolAdmin}
+            isSuperAdmin={isSuperAdmin}
+            displaySchoolName={displaySchoolName}
+            theme={theme}
+          />
+        );
+
       default:
         return <div className="p-10 text-center text-muted-foreground">Section {activeSection} not implemented yet.</div>;
     }
@@ -243,7 +271,7 @@ export default function StrideDashboard({
             e.preventDefault();
             const code = e.target.schoolCode.value;
             if (onJoinSchool) onJoinSchool(code);
-            else alert(`Joining school: ${code} (Logic pending connection)`);
+            else console.warn('[STRIDE] onJoinSchool not connected - school code:', code);
           }}>
             <input 
               name="schoolCode"
