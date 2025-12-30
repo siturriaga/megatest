@@ -10,9 +10,27 @@ import { SANDBOX_STUDENTS, SANDBOX_HOUSES, SANDBOX_LOGS, SANDBOX_CONFIG } from '
 import { sanitizeText, sanitizeStudentName, isAllowedDomain, rateLimiters } from '../utils/sanitize';
 import { validatePass, validateLogEntry, validateBroadcast, validateConflictGroup, validateParentContact, validateSchool, validateConfig } from '../utils/validators';
 
+/** @constant {string} Allowed email domain for authentication */
 const ALLOWED_DOMAIN = 'dadeschools.net';
+
+/** @constant {string} Current consent flow version for tracking */
 const CONSENT_VERSION = '1.0.0';
 
+/**
+ * Main STRIDE application state hook.
+ * Manages authentication, school data, students, passes, and all app state.
+ * 
+ * @param {Object} router - Next.js router instance
+ * @param {React.RefObject} botRef - Reference to StrideBot animation component
+ * @param {Function} setToast - Toast notification setter function
+ * @param {Object} user - Firebase user object
+ * @param {Function} setUser - User state setter function
+ * @returns {Object} Complete application state and action functions
+ * 
+ * @example
+ * const strideState = useStrideState(router, botRef, showToast, user, setUser);
+ * const { allStudents, issuePass, toggleLockdown } = strideState;
+ */
 export function useStrideState(router, botRef, setToast, user, setUser) {
   // Auth & User State
   const [userData, setUserData] = useState(null);
@@ -57,7 +75,9 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   // Safety State
   const [lockdown, setLockdown] = useState(false);
   const [lockdownMeta, setLockdownMeta] = useState(null);
-
+  const [lockdownMeta, setLockdownMeta] = useState(null);
+  const [alertLevel, setAlertLevel] = useState('normal');
+  const [lockedZones, setLockedZones] = useState([]);
   // Sandbox State
   const [sandboxMode, setSandboxMode] = useState(false);
   const [sandboxStudents, setSandboxStudents] = useState([...SANDBOX_STUDENTS]);
@@ -1408,6 +1428,189 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   };
 
   // =====================
+  // HOUSE ASSIGNMENT FUNCTIONS
+  // =====================
+
+  /**
+   * Assign a single student to a house
+   */
+  const assignStudentToHouse = async (studentId, houseId) => {
+    if (sandboxMode) {
+      setSandboxStudents(prev => prev.map(s => 
+        s.id === studentId ? { ...s, houseId } : s
+      ));
+      setAllStudents(prev => prev.map(s => 
+        s.id === studentId ? { ...s, houseId } : s
+      ));
+      setToast?.({ message: 'Student assigned to house', type: 'success' });
+      return true;
+    }
+
+    try {
+      const studentRef = doc(db, studentsPath(currentSchoolId), studentId);
+      await updateDoc(studentRef, { houseId });
+      setToast?.({ message: 'Student assigned to house', type: 'success' });
+      return true;
+    } catch (err) {
+      console.error('Assign student to house error:', err);
+      setToast?.({ message: 'Failed to assign student', type: 'error' });
+      return false;
+    }
+  };
+
+  /**
+   * Bulk assign multiple students to houses
+   */
+  const bulkAssignStudents = async (assignments) => {
+    if (!Array.isArray(assignments) || assignments.length === 0) {
+      setToast?.({ message: 'No assignments provided', type: 'error' });
+      return false;
+    }
+
+    if (sandboxMode) {
+      setSandboxStudents(prev => {
+        const assignmentMap = new Map(assignments.map(a => [a.studentId, a.houseId]));
+        return prev.map(s => assignmentMap.has(s.id) 
+          ? { ...s, houseId: assignmentMap.get(s.id) } 
+          : s
+        );
+      });
+      setAllStudents(prev => {
+        const assignmentMap = new Map(assignments.map(a => [a.studentId, a.houseId]));
+        return prev.map(s => assignmentMap.has(s.id) 
+          ? { ...s, houseId: assignmentMap.get(s.id) } 
+          : s
+        );
+      });
+      setToast?.({ message: `${assignments.length} students assigned`, type: 'success' });
+      return true;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      
+      for (const { studentId, houseId } of assignments) {
+        const studentRef = doc(db, studentsPath(currentSchoolId), studentId);
+        batch.update(studentRef, { houseId });
+      }
+      
+      await batch.commit();
+      setToast?.({ message: `${assignments.length} students assigned`, type: 'success' });
+      return true;
+    } catch (err) {
+      console.error('Bulk assign students error:', err);
+      setToast?.({ message: 'Failed to bulk assign students', type: 'error' });
+      return false;
+    }
+  };
+
+  /**
+   * Update a house's display name
+   */
+  const updateHouseName = async (houseId, newName) => {
+    if (!newName?.trim()) {
+      setToast?.({ message: 'House name cannot be empty', type: 'error' });
+      return false;
+    }
+
+    const sanitizedName = newName.trim().slice(0, 50);
+
+    if (sandboxMode) {
+      setSandboxHouses(prev => prev.map(h => 
+        h.id === houseId ? { ...h, name: sanitizedName } : h
+      ));
+      setHouses(prev => prev.map(h => 
+        h.id === houseId ? { ...h, name: sanitizedName } : h
+      ));
+      setToast?.({ message: 'House renamed', type: 'success' });
+      return true;
+    }
+
+    try {
+      const houseRef = doc(db, housesPath(currentSchoolId), houseId);
+      await updateDoc(houseRef, { name: sanitizedName });
+      setToast?.({ message: 'House renamed', type: 'success' });
+      return true;
+    } catch (err) {
+      console.error('Update house name error:', err);
+      setToast?.({ message: 'Failed to rename house', type: 'error' });
+      return false;
+    }
+  };
+
+  // =====================
+  // ALERT LEVEL FUNCTIONS
+  // =====================
+
+  /**
+   * Set the school-wide alert level
+   */
+  const setAlertLevelAction = async (level) => {
+    const validLevels = ['normal', 'hold', 'lockdown'];
+    if (!validLevels.includes(level)) {
+      setToast?.({ message: 'Invalid alert level', type: 'error' });
+      return;
+    }
+
+    if (sandboxMode) {
+      setAlertLevel(level);
+      if (level === 'lockdown') {
+        setLockdown(true);
+      } else {
+        setLockdown(false);
+      }
+      botRef?.current?.push(level === 'lockdown' ? 'siren' : level === 'hold' ? 'warning' : 'happy');
+      setToast?.({ message: `Alert level set to ${level.toUpperCase()}`, type: level === 'normal' ? 'success' : 'warning' });
+      return;
+    }
+
+    try {
+      const schoolRef = doc(db, COLLECTIONS.SCHOOLS, currentSchoolId);
+      await updateDoc(schoolRef, {
+        alertLevel: level,
+        lockdown: level === 'lockdown',
+        lockdownMeta: level === 'lockdown' 
+          ? { activatedBy: user?.email, activatedAt: serverTimestamp(), level }
+          : null,
+      });
+      setToast?.({ message: `Alert level set to ${level.toUpperCase()}`, type: level === 'normal' ? 'success' : 'warning' });
+    } catch (err) {
+      console.error('Set alert level error:', err);
+      setToast?.({ message: 'Failed to set alert level', type: 'error' });
+    }
+  };
+
+  /**
+   * Toggle a zone's locked status
+   */
+  const toggleZoneLock = async (zone) => {
+    const isCurrentlyLocked = lockedZones.includes(zone);
+    
+    if (sandboxMode) {
+      setLockedZones(prev => 
+        isCurrentlyLocked 
+          ? prev.filter(z => z !== zone)
+          : [...prev, zone]
+      );
+      setToast?.({ message: `${zone} ${isCurrentlyLocked ? 'unlocked' : 'locked'}`, type: 'info' });
+      return;
+    }
+
+    try {
+      const schoolRef = doc(db, COLLECTIONS.SCHOOLS, currentSchoolId);
+      const newLockedZones = isCurrentlyLocked
+        ? lockedZones.filter(z => z !== zone)
+        : [...lockedZones, zone];
+      
+      await updateDoc(schoolRef, { lockedZones: newLockedZones });
+      setToast?.({ message: `${zone} ${isCurrentlyLocked ? 'unlocked' : 'locked'}`, type: 'info' });
+    } catch (err) {
+      console.error('Toggle zone lock error:', err);
+      setToast?.({ message: 'Failed to toggle zone lock', type: 'error' });
+    }
+  };
+
+  // =====================
   // RETURN STATE & ACTIONS
   // =====================
 
@@ -1474,6 +1677,10 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     lockdownMeta,
     toggleLockdown,
     generateLockdownReport,
+    alertLevel,
+    setAlertLevel: setAlertLevelAction,
+    lockedZones,
+    toggleZoneLock,
 
     // SuperAdmin Functions
     globalLockdown,
@@ -1488,6 +1695,11 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     logInfraction,
     awardPoints,
     logTardy,
+
+    // House Assignment
+    assignStudentToHouse,
+    bulkAssignStudents,
+    updateHouseName,
 
     // Helpers
     hasActivePass,
