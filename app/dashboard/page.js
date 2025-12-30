@@ -1,128 +1,176 @@
 'use client';
-import { useState, useRef, useCallback } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStrideState } from '@/hooks/useStrideState';
+
+// Hook - THE CONNECTION
+import { useStrideState } from '../../hooks/useStrideState';
+
+// Dashboard Component
 import StrideDashboard from './StrideDashboard';
-import StrideBot from './components/StrideBot';
+
+// Global Components
 import ConsentFlow from './components/ConsentFlow';
-import { Loader2 } from 'lucide-react';
+import StrideBot from './components/StrideBot';
 import Toast from './components/Toast';
 
+/**
+ * STRIDE Dashboard Page - Entry Point
+ * 
+ * This is the Next.js route handler for /dashboard
+ * It calls useStrideState() to get all data and passes it to StrideDashboard
+ */
 export default function DashboardPage() {
+  // =====================
+  // REFS & ROUTER
+  // =====================
   const router = useRouter();
   const botRef = useRef(null);
   
-  // State for user and toast (required by useStrideState)
-  const [user, setUser] = useState(null);
+  // =====================
+  // TOAST STATE (local to page)
+  // =====================
   const [toast, setToast] = useState(null);
-
-  // Toast helper with auto-dismiss
-  const showToast = useCallback((toastData) => {
-    setToast(toastData);
-    setTimeout(() => setToast(null), 4000);
-  }, []);
-
-  // Initialize the "Brain" (The Hook) with all 5 required parameters
-  const strideState = useStrideState(router, botRef, showToast, user, setUser);
   
-  const { 
-    isLoading, 
-    showConsentFlow, 
-    handleConsentComplete, 
-    handleEnterSandbox,
-    needsConsent,
-    currentSchoolId,
-  } = strideState;
+  // =====================
+  // MAIN STATE HOOK - THE CONNECTION
+  // =====================
+  const stride = useStrideState(router, botRef, setToast);
 
-  // Loading Screen
-  if (isLoading) {
+  // =====================
+  // LOADING STATE
+  // =====================
+  if (stride.isLoading) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-950 text-white">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-500 mb-4" />
-        <h2 className="text-xl font-bold animate-pulse">Initializing STRIDE...</h2>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading STRIDE...</p>
+        </div>
       </div>
     );
   }
 
-  // Render ConsentFlow when needed
-  if (showConsentFlow || needsConsent) {
+  // =====================
+  // CONSENT FLOW (First-time users)
+  // =====================
+  if (stride.showConsentFlow) {
     return (
       <ConsentFlow
-        user={user}
-        onComplete={handleConsentComplete}
-        onSandbox={handleEnterSandbox}
-        existingSchoolId={currentSchoolId}
+        user={stride.user}
+        onComplete={stride.handleConsentComplete}
+        onEnterSandbox={stride.handleEnterSandbox}
       />
     );
   }
 
-  // Main Dashboard
+  // =====================
+  // MAIN DASHBOARD
+  // =====================
   return (
-    <main className="relative">
-      <StrideDashboard 
-        // Pass everything from the hook state
-        {...strideState}
+    <>
+      {/* Main Dashboard */}
+      <StrideDashboard
+        // Auth & User
+        user={stride.user}
+        isSchoolAdmin={stride.isSchoolAdmin}
+        isSuperAdmin={stride.isSuperAdmin}
+        userGreeting={stride.userGreeting}
+        onSignOut={stride.signOutUser}
+        employeeId={stride.employeeId}
         
-        // Explicitly map Actions
-        onSignOut={strideState.signOutUser}
-        onIssuePass={strideState.issuePass}
-        onEndPass={strideState.returnStudent}
-        onLogInfraction={strideState.logInfraction}
-        onAwardPoints={strideState.awardPoints}
-        onUpdateConfig={strideState.updateConfig}
-        onUpdateHouses={strideState.updateHouses}
-        onHandleFileUpload={strideState.handleFileUpload}
-        onToggleLockdown={strideState.toggleLockdown}
-        onGlobalBroadcast={strideState.globalBroadcast}
-        onSwitchSchool={strideState.switchSchool}
-        onCreateSchool={strideState.createSchool}
-        onJoinSchool={strideState.switchSchool}
+        // School
+        currentSchoolId={stride.currentSchoolId}
+        displaySchoolName={stride.displaySchoolName}
+        sandboxMode={stride.sandboxMode}
+        allSchools={stride.allSchools}
+        onCreateSchool={stride.createSchool}
+        onSwitchSchool={stride.switchSchool}
         
-        // House Assignment Functions
-        onAssignStudent={strideState.assignStudentToHouse}
-        onBulkAssign={strideState.bulkAssignStudents}
-        onUpdateHouseName={strideState.updateHouseName}
+        // Data Collections
+        allStudents={stride.allStudents}
+        houses={stride.houses}
+        activePasses={stride.activePasses}
+        logs={stride.logs}
+        broadcasts={stride.broadcasts}
+        parentContacts={stride.parentContacts}
+        conflictGroups={stride.conflictGroups}
         
-        // Alert Level Functions
-        onSetAlertLevel={strideState.setAlertLevel}
-        alertLevel={strideState.alertLevel}
-        lockedZones={strideState.lockedZones}
-        onToggleZoneLock={strideState.toggleZoneLock}
+        // Configs
+        labelsConfig={stride.labelsConfig}
+        economyConfig={stride.economyConfig}
+        bellSchedule={stride.bellSchedule}
+        settingsConfig={stride.settingsConfig}
         
-        // Conflict Groups
-        conflictGroups={strideState.conflictGroups}
-        onAddConflictGroup={strideState.addConflictGroup}
-        onRemoveConflictGroup={strideState.removeConflictGroup}
+        // Pass Actions
+        onIssuePass={stride.issuePass}
+        onEndPass={stride.returnStudent}
+        hasActivePass={stride.hasActivePass}
+        isDestinationFull={stride.isDestinationFull}
+        getWaitlistPosition={stride.getWaitlistPosition}
+        destinationCounts={stride.destinationCounts}
+        
+        // Student Actions
+        onLogInfraction={stride.logInfraction}
+        onAwardPoints={stride.awardPoints}
+        onLogTardy={stride.logTardy}
+        onAssignStudent={stride.assignStudentToHouse}
+        onBulkAssign={stride.bulkAssignStudents}
+        onUpdateHouseName={stride.updateHouseName}
+        
+        // Admin Actions
+        onUpdateConfig={stride.updateConfig}
+        onUpdateHouses={stride.updateHouses}
+        onHandleFileUpload={stride.handleFileUpload}
+        onToggleLockdown={stride.toggleLockdown}
+        lockdown={stride.lockdown}
+        
+        // Safety
+        alertLevel={stride.alertLevel}
+        onSetAlertLevel={stride.setAlertLevel}
+        lockedZones={stride.lockedZones}
+        onToggleZoneLock={stride.toggleZoneLock}
+        onAddConflictGroup={stride.addConflictGroup}
+        onRemoveConflictGroup={stride.removeConflictGroup}
         
         // Communication
-        onSendBroadcast={strideState.sendBroadcast}
-        onDeleteBroadcast={strideState.deleteBroadcast}
-        onPinBroadcast={strideState.pinBroadcast}
+        onSendBroadcast={stride.sendBroadcast}
+        onDeleteBroadcast={stride.deleteBroadcast}
+        onPinBroadcast={stride.pinBroadcast}
+        onGlobalBroadcast={stride.globalBroadcast}
+        onSaveParentContact={stride.saveParentContact}
         
-        // Parent Contacts
-        onSaveParentContact={strideState.saveParentContact}
+        // UI State
+        theme={stride.theme}
+        onThemeChange={stride.setTheme}
+        showSchoolPrompt={stride.showSchoolPrompt}
+        onJoinSchool={stride.switchSchool}
         
-        // Tardy
-        onLogTardy={strideState.logTardy}
-        
-        // Theme
-        onThemeChange={strideState.setTheme}
-        
-        // Bot Reference for animations
+        // Refs
         botRef={botRef}
+        
+        // Analytics
+        analyticsData={stride.analyticsData}
       />
 
-      {/* Global Components */}
-      <StrideBot ref={botRef} />
-      
-      {/* Toast with props connected */}
+      {/* StrideBot - Global Assistant */}
+      <StrideBot
+        ref={botRef}
+        theme={stride.theme}
+        lockdown={stride.lockdown}
+        alertLevel={stride.alertLevel}
+        userGreeting={stride.userGreeting}
+        sandboxMode={stride.sandboxMode}
+        activeBroadcast={stride.broadcasts?.[0] || null}
+      />
+
+      {/* Toast Notifications */}
       {toast && (
-        <Toast 
-          message={toast.message} 
-          type={toast.type} 
-          onClose={() => setToast(null)} 
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
-    </main>
+    </>
   );
 }
