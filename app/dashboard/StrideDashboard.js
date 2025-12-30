@@ -68,7 +68,7 @@ export default function StrideDashboard({
   onIssuePass, onEndPass, onLogInfraction, onAwardPoints, 
   onToggleLockdown, onGlobalBroadcast,
   // State
-  lockdown, theme, onThemeChange,
+  lockdown, theme, onThemeChange, showSchoolPrompt, onJoinSchool,
   // New Hook Actions
   onAssignStudent, onBulkAssign, onUpdateHouseName, botRef
 }) {
@@ -225,6 +225,45 @@ export default function StrideDashboard({
         return <div className="p-10 text-center text-muted-foreground">Section {activeSection} not implemented yet.</div>;
     }
   };
+
+  // =====================
+  // SCHOOL JOIN PROMPT
+  // =====================
+  if (showSchoolPrompt && !isSuperAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
+          <div className="w-16 h-16 bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Building size={32} />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Join Your School</h2>
+          <p className="text-slate-400 mb-6">Enter the School ID provided by your administrator.</p>
+          
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const code = e.target.schoolCode.value;
+            if (onJoinSchool) onJoinSchool(code);
+            else alert(`Joining school: ${code} (Logic pending connection)`);
+          }}>
+            <input 
+              name="schoolCode"
+              type="text" 
+              placeholder="e.g. LINCOLN_HIGH_2024"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
+              required
+            />
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all">
+              Join School
+            </button>
+          </form>
+          
+          <button onClick={onSignOut} className="mt-6 text-sm text-slate-500 hover:text-white">
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // =====================
   // MAIN LAYOUT
