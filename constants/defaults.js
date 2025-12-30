@@ -722,6 +722,159 @@ export function fuzzySearchStudents(students, query, limit = 10) {
   return results.slice(0, limit).map(r => r.student);
 }
 
+
+// ==================
+// ALERT LEVELS - Used by SafetyPanel.js
+// ==================
+export const ALERT_LEVELS = {
+  NORMAL: {
+    id: 'normal',
+    label: 'All Clear',
+    emoji: '✅',
+    color: 'emerald',
+    description: 'Normal operations',
+    passesAllowed: true,
+  },
+  HOLD: {
+    id: 'hold',
+    label: 'Soft Hold',
+    emoji: '⚠️',
+    color: 'amber',
+    description: 'Students stay in current location',
+    passesAllowed: false,
+  },
+  LOCKDOWN: {
+    id: 'lockdown',
+    label: 'Lockdown',
+    emoji: '🚨',
+    color: 'red',
+    description: 'Emergency lockdown - all movement stopped',
+    passesAllowed: false,
+  },
+};
+
+// ==================
+// HOUSE GENERATION FUNCTIONS - Used by AdminPanel.js
+// ==================
+
+/**
+ * Generate houses based on detected grade levels
+ * @param {number[]} grades - Array of unique grade levels found in roster
+ * @returns {Array} Array of house objects ready for Firestore
+ */
+export function generateHousesFromGrades(grades) {
+  if (!Array.isArray(grades) || grades.length === 0) {
+    return [
+      { id: 'house-9', name: 'Freshmen Phoenix', mascot: '🔥', color: '#ef4444', score: 0, gradeLevel: 9 },
+      { id: 'house-10', name: 'Sophomore Wolves', mascot: '🐺', color: '#3b82f6', score: 0, gradeLevel: 10 },
+      { id: 'house-11', name: 'Junior Hawks', mascot: '🦅', color: '#22c55e', score: 0, gradeLevel: 11 },
+      { id: 'house-12', name: 'Senior Panthers', mascot: '🐆', color: '#a855f7', score: 0, gradeLevel: 12 },
+    ];
+  }
+
+  const sortedGrades = [...new Set(grades)].sort((a, b) => a - b);
+  
+  const mascotMap = {
+    6: { name: '6th Grade Dragons', mascot: '🐉', color: '#f59e0b' },
+    7: { name: '7th Grade Tigers', mascot: '🐯', color: '#22c55e' },
+    8: { name: '8th Grade Sharks', mascot: '🦈', color: '#06b6d4' },
+    9: { name: 'Freshman Phoenix', mascot: '🔥', color: '#ef4444' },
+    10: { name: 'Sophomore Wolves', mascot: '🐺', color: '#3b82f6' },
+    11: { name: 'Junior Hawks', mascot: '🦅', color: '#8b5cf6' },
+    12: { name: 'Senior Panthers', mascot: '🐆', color: '#a855f7' },
+  };
+
+  const fallbackColors = ['#6366f1', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
+
+  return sortedGrades.map((grade, index) => {
+    const preset = mascotMap[grade];
+    
+    if (preset) {
+      return {
+        id: `house-${grade}`,
+        name: preset.name,
+        mascot: preset.mascot,
+        color: preset.color,
+        score: 0,
+        gradeLevel: grade,
+      };
+    }
+    
+    return {
+      id: `house-${grade}`,
+      name: `Grade ${grade} Team`,
+      mascot: '🏆',
+      color: fallbackColors[index % fallbackColors.length],
+      score: 0,
+      gradeLevel: grade,
+    };
+  });
+}
+
+/**
+ * Assign a student to their grade-appropriate house
+ * @param {number} gradeLevel - The student's grade level
+ * @param {Array} houses - Array of house objects with gradeLevel property
+ * @returns {string|null} The house ID to assign, or null if no match
+ */
+export function assignHouseByGrade(gradeLevel, houses) {
+  if (!Array.isArray(houses) || houses.length === 0) {
+    return null;
+  }
+
+  const exactMatch = houses.find(h => h.gradeLevel === gradeLevel);
+  if (exactMatch) {
+    return exactMatch.id;
+  }
+
+  const idMatch = houses.find(h => h.id === `house-${gradeLevel}`);
+  if (idMatch) {
+    return idMatch.id;
+  }
+
+  return houses[0]?.id || null;
+}
+
+/**
+ * Auto-balance students across houses
+ * @param {Array} students - Array of student objects
+ * @param {Array} houses - Array of house objects
+ * @returns {Array} Array of { studentId, houseId } assignments
+ */
+export function autoBalanceHouses(students, houses) {
+  if (!Array.isArray(students) || !Array.isArray(houses) || houses.length === 0) {
+    return [];
+  }
+
+  const unassigned = students.filter(s => !s.houseId);
+  const assignments = [];
+  
+  const houseCounts = new Map(houses.map(h => [h.id, 0]));
+  students.forEach(s => {
+    if (s.houseId && houseCounts.has(s.houseId)) {
+      houseCounts.set(s.houseId, houseCounts.get(s.houseId) + 1);
+    }
+  });
+
+  unassigned.forEach(student => {
+    let minHouse = houses[0].id;
+    let minCount = houseCounts.get(houses[0].id) || 0;
+    
+    houses.forEach(h => {
+      const count = houseCounts.get(h.id) || 0;
+      if (count < minCount) {
+        minCount = count;
+        minHouse = h.id;
+      }
+    });
+
+    assignments.push({ studentId: student.id, houseId: minHouse });
+    houseCounts.set(minHouse, minCount + 1);
+  });
+
+  return assignments;
+}
+
 // ==================
 // DEFAULT EXPORT
 // ==================
@@ -745,6 +898,7 @@ export default {
   LOG_TYPES,
   SAFE_LOCATIONS,
   QR_TYPES,
+  ALERT_LEVELS,
   getMTSSTier,
   getMascotById,
   getRandomMascot,
@@ -759,4 +913,7 @@ export default {
   areNamesSimilar,
   findBestColumnMatch,
   fuzzySearchStudents,
+  generateHousesFromGrades,
+  assignHouseByGrade,
+  autoBalanceHouses,
 };
