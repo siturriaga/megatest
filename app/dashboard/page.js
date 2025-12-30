@@ -1,9 +1,10 @@
 'use client';
-import { useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStrideState } from '@/hooks/useStrideState';
-import StrideDashboard from './StrideDashboard'; // Imports the UI from the same folder
+import StrideDashboard from './StrideDashboard';
 import StrideBot from './components/StrideBot';
+import ConsentFlow from './components/ConsentFlow';
 import { Loader2 } from 'lucide-react';
 import Toast from './components/Toast';
 
@@ -11,11 +12,29 @@ export default function DashboardPage() {
   const router = useRouter();
   const botRef = useRef(null);
   
-  // 1. Initialize the "Brain" (The Hook)
-  const strideState = useStrideState(router, botRef);
-  const { isLoading, user } = strideState;
+  // State for user and toast (required by useStrideState)
+  const [user, setUser] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  // 2. Loading Screen
+  // Toast helper with auto-dismiss
+  const showToast = useCallback((toastData) => {
+    setToast(toastData);
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  // Initialize the "Brain" (The Hook) with all 5 required parameters
+  const strideState = useStrideState(router, botRef, showToast, user, setUser);
+  
+  const { 
+    isLoading, 
+    showConsentFlow, 
+    handleConsentComplete, 
+    handleEnterSandbox,
+    needsConsent,
+    currentSchoolId,
+  } = strideState;
+
+  // Loading Screen
   if (isLoading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-950 text-white">
@@ -25,8 +44,19 @@ export default function DashboardPage() {
     );
   }
 
-  // 3. The Dashboard Bridge
-  // We pass ALL state and functions from useStrideState down to StrideDashboard
+  // Render ConsentFlow when needed
+  if (showConsentFlow || needsConsent) {
+    return (
+      <ConsentFlow
+        user={user}
+        onComplete={handleConsentComplete}
+        onSandbox={handleEnterSandbox}
+        existingSchoolId={currentSchoolId}
+      />
+    );
+  }
+
+  // Main Dashboard
   return (
     <main className="relative">
       <StrideDashboard 
@@ -34,6 +64,7 @@ export default function DashboardPage() {
         {...strideState}
         
         // Explicitly map Actions
+        onSignOut={strideState.signOutUser}
         onIssuePass={strideState.issuePass}
         onEndPass={strideState.returnStudent}
         onLogInfraction={strideState.logInfraction}
@@ -43,19 +74,39 @@ export default function DashboardPage() {
         onHandleFileUpload={strideState.handleFileUpload}
         onToggleLockdown={strideState.toggleLockdown}
         onGlobalBroadcast={strideState.globalBroadcast}
+        onSwitchSchool={strideState.switchSchool}
+        onCreateSchool={strideState.createSchool}
+        onJoinSchool={strideState.switchSchool}
         
-        // --- NEW CONNECTIONS (Crucial for Fuzzy Uploads & Mascots) ---
+        // House Assignment Functions
         onAssignStudent={strideState.assignStudentToHouse}
         onBulkAssign={strideState.bulkAssignStudents}
         onUpdateHouseName={strideState.updateHouseName}
         
-        // Pass the Bot Reference for animations
+        // Alert Level Functions
+        onSetAlertLevel={strideState.setAlertLevel}
+        alertLevel={strideState.alertLevel}
+        lockedZones={strideState.lockedZones}
+        onToggleZoneLock={strideState.toggleZoneLock}
+        
+        // Theme
+        onThemeChange={strideState.setTheme}
+        
+        // Bot Reference for animations
         botRef={botRef}
       />
 
       {/* Global Components */}
       <StrideBot ref={botRef} />
-      <Toast />
+      
+      {/* Toast with props connected */}
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast(null)} 
+        />
+      )}
     </main>
   );
 }
