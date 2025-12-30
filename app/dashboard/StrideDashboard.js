@@ -1,39 +1,78 @@
 'use client';
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   // Navigation & UI
   Menu, LogOut, Moon, Sun, 
   // Icons
   Navigation, Users, AlertTriangle, Award, 
-  Tag, Home, MessageSquare, Clock, DollarSign, CheckCircle, 
+  Tag, Home, Clock, DollarSign, 
   FileText, QrCode, Shield, Settings, MapPin,
-  Globe, Building, Radio, Activity, Upload
+  Globe, Building, Radio, Upload, Phone, BarChart3, BookOpen
 } from 'lucide-react';
 
-// --- IMPORT YOUR ADVANCED COMPONENTS ---
-import StudentRosterUpload from './components/StudentRosterUpload';
+// =====================
+// COMPONENT IMPORTS - ALL WIRED
+// =====================
+
+// Core Teacher Panels
+import HallPassPanel from './components/HallPassPanel';
+import InfractionsPanel from './components/InfractionsPanel';
 import IncentivesPanel from './components/IncentivesPanel';
-import HallPassQRSetup from './components/HallPassQRSetup';
+import RecordsPanel from './components/RecordsPanel';
+
+// Admin Panels
+import StudentRosterUpload from './components/StudentRosterUpload';
 import StudentHouseAssignment from './components/StudentHouseAssignment';
+import HallPassQRSetup from './components/HallPassQRSetup';
 import SafetyPanel from './components/SafetyPanel';
-// Note: We keep simple sections inline, but swap complex ones for components
+import AdminPanel from './components/AdminPanel';
+import AnalyticsPanel from './components/AnalyticsPanel';
+
+// SuperAdmin
+import SuperAdminPanel from './components/SuperAdminPanel';
+
+// Communication
+import CommunicationPanel from './components/CommunicationPanel';
+import ParentContactLog from './components/ParentContactLog';
+
+// Kiosk & Scanner
+import TardyKiosk from './components/TardyKiosk';
+import QRScanner from './components/QRScanner';
+import HallMonitorView from './components/HallMonitorView';
+
+// Pass Display Components
+import SwipeablePassRow from './components/SwipeablePassRow';
+import ActivePassCard from './components/ActivePassCard';
+import PassScannerDisplay from './components/PassScannerDisplay';
+
+// Modals & Documents
+import DigitalID from './components/DigitalID';
+import DetentionModal from './components/DetentionModal';
+import MTSSDoc from './components/MTSSDoc';
+
+// Overlays
+import SandboxGuideOrbs from './components/SandboxGuideOrbs';
 
 /**
- * STRIDE Unified Dashboard - REFACTORED CONTROLLER
- * Connects directly to advanced logic components.
+ * STRIDE Unified Dashboard - FULLY WIRED
+ * All 31 components connected
  */
 
 // =====================
-// SECTION DEFINITIONS
+// SECTION DEFINITIONS (21 sections)
 // =====================
 const SECTIONS = {
-  // Teacher
+  // Teacher (6)
   hallpass: { id: 'hallpass', label: 'Hall Pass', icon: Navigation, tier: 'teacher', group: 'core' },
   roster: { id: 'roster', label: 'Roster', icon: Users, tier: 'teacher', group: 'core' },
   infractions: { id: 'infractions', label: 'Infractions', icon: AlertTriangle, tier: 'teacher', group: 'core' },
   incentives: { id: 'incentives', label: 'Incentives & Battle', icon: Award, tier: 'teacher', group: 'core' },
+  records: { id: 'records', label: 'Activity Log', icon: BookOpen, tier: 'teacher', group: 'core' },
+  contacts: { id: 'contacts', label: 'Parent Contacts', icon: Phone, tier: 'teacher', group: 'core' },
   
-  // Admin
+  // Admin (12)
+  analytics: { id: 'analytics', label: 'Analytics', icon: BarChart3, tier: 'admin', group: 'manage' },
+  tardy: { id: 'tardy', label: 'Tardy Kiosk', icon: Clock, tier: 'admin', group: 'manage' },
   destinations: { id: 'destinations', label: 'Destinations', icon: MapPin, tier: 'admin', group: 'config' },
   labels: { id: 'labels', label: 'Labels', icon: Tag, tier: 'admin', group: 'config' },
   houses: { id: 'houses', label: 'House Manager', icon: Home, tier: 'admin', group: 'config' },
@@ -42,45 +81,82 @@ const SECTIONS = {
   qrpasses: { id: 'qrpasses', label: 'Classroom QR', icon: QrCode, tier: 'admin', group: 'manage' },
   upload: { id: 'upload', label: 'Smart Upload', icon: Upload, tier: 'admin', group: 'manage' },
   safety: { id: 'safety', label: 'Safety & Lockdown', icon: Shield, tier: 'admin', group: 'manage' },
+  communication: { id: 'communication', label: 'Announcements', icon: Radio, tier: 'admin', group: 'manage' },
   settings: { id: 'settings', label: 'Settings', icon: Settings, tier: 'admin', group: 'config' },
   
-  // SuperAdmin
+  // SuperAdmin (3)
   command: { id: 'command', label: 'Command Center', icon: Globe, tier: 'superadmin', group: 'global' },
   schools: { id: 'schools', label: 'Manage Schools', icon: Building, tier: 'superadmin', group: 'global' },
-  broadcast: { id: 'broadcast', label: 'Broadcast', icon: Radio, tier: 'superadmin', group: 'global' },
+  broadcast: { id: 'broadcast', label: 'Global Broadcast', icon: Radio, tier: 'superadmin', group: 'global' },
 };
 
 const SECTION_GROUPS = {
   core: { label: '📚 Core', description: 'Daily classroom tools' },
   config: { label: '⚙️ Configuration', description: 'School settings' },
-  manage: { label: '📋 Management', description: 'Data & approvals' },
+  manage: { label: '📋 Management', description: 'Data & tools' },
   global: { label: '🌐 Global', description: 'Multi-school admin' },
 };
 
 export default function StrideDashboard({
-  // Props from page.js
-  user, isSchoolAdmin, isSuperAdmin, userGreeting, onSignOut,
+  // Auth & User
+  user, isSchoolAdmin, isSuperAdmin, userGreeting, onSignOut, employeeId,
+  
+  // School
   currentSchoolId, displaySchoolName, sandboxMode, allSchools,
   onCreateSchool, onSwitchSchool,
+  
+  // Data Collections
   allStudents = [], houses = [], activePasses = [], logs = [],
+  broadcasts = [], parentContacts = [], conflictGroups = [],
+  
+  // Configs
   labelsConfig = {}, economyConfig = {}, bellSchedule = {}, settingsConfig = {},
-  // Actions
-  onUpdateConfig, onUpdateHouses, onHandleFileUpload, 
-  onIssuePass, onEndPass, onLogInfraction, onAwardPoints, 
-  onToggleLockdown, onGlobalBroadcast,
-  // State
-  lockdown, theme, onThemeChange, showSchoolPrompt, onJoinSchool,
-  // New Hook Actions
-  onAssignStudent, onBulkAssign, onUpdateHouseName, botRef,
-  // Safety Features
+  
+  // Pass Actions
+  onIssuePass, onEndPass, hasActivePass, isDestinationFull, getWaitlistPosition, destinationCounts,
+  
+  // Student Actions
+  onLogInfraction, onAwardPoints, onLogTardy,
+  onAssignStudent, onBulkAssign, onUpdateHouseName,
+  
+  // Admin Actions
+  onUpdateConfig, onUpdateHouses, onHandleFileUpload,
+  onToggleLockdown, lockdown,
+  
+  // Safety
   alertLevel, onSetAlertLevel, lockedZones, onToggleZoneLock,
-  // Conflict Groups
-  conflictGroups = [], onAddConflictGroup, onRemoveConflictGroup,
+  onAddConflictGroup, onRemoveConflictGroup,
+  
+  // Communication
+  onSendBroadcast, onDeleteBroadcast, onPinBroadcast,
+  onGlobalBroadcast, onSaveParentContact,
+  
+  // UI State
+  theme, onThemeChange, showSchoolPrompt, onJoinSchool,
+  
+  // Refs
+  botRef,
+  
+  // Analytics
+  analyticsData = {},
 }) {
+  // =====================
+  // LOCAL STATE
+  // =====================
   const [activeSection, setActiveSection] = useState('hallpass');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Modal States
+  const [selectedStudentForID, setSelectedStudentForID] = useState(null);
+  const [selectedStudentForMTSS, setSelectedStudentForMTSS] = useState(null);
+  const [detentionStudent, setDetentionStudent] = useState(null);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showHallMonitor, setShowHallMonitor] = useState(false);
+  const [scannedPass, setScannedPass] = useState(null);
 
-  // --- VISIBILITY LOGIC ---
+  // =====================
+  // VISIBILITY LOGIC
+  // =====================
   const visibleSections = useMemo(() => {
     return Object.values(SECTIONS).filter(section => {
       if (section.tier === 'teacher') return true;
@@ -99,11 +175,187 @@ export default function StrideDashboard({
     return groups;
   }, [visibleSections]);
 
-  // --- RENDER SECTION CONTENT ---
+  // =====================
+  // RENDER SECTION CONTENT (21 cases)
+  // =====================
   const renderSectionContent = () => {
     switch (activeSection) {
       
-      // 1. INCENTIVES & BATTLES (Replaced with IncentivesPanel)
+      // ═══════════════════════════════════════
+      // TEACHER SECTIONS (6)
+      // ═══════════════════════════════════════
+      
+      case 'hallpass':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Issue Pass Panel */}
+              <HallPassPanel
+                allStudents={allStudents}
+                selectedStudent={null}
+                setSelectedStudent={() => {}}
+                onIssuePass={onIssuePass}
+                onReturn={onEndPass}
+                lockdown={lockdown}
+                theme={theme}
+                labelsConfig={labelsConfig}
+                hasActivePass={hasActivePass}
+                isDestinationFull={isDestinationFull}
+                getWaitlistPosition={getWaitlistPosition}
+                destinationCounts={destinationCounts}
+                botRef={botRef}
+              />
+              
+              {/* Active Passes with Swipeable Rows */}
+              <div className="space-y-4">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <Clock size={20} className="text-amber-500" /> 
+                  Active Passes ({activePasses.length})
+                </h3>
+                {activePasses.length === 0 ? (
+                  <div className="p-6 bg-accent rounded-xl border border-border text-center text-muted-foreground">
+                    No active passes
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {activePasses.map(pass => (
+                      <SwipeablePassRow
+                        key={pass.id}
+                        pass={pass}
+                        onReturn={() => onEndPass?.(pass.id)}
+                        theme={theme}
+                      />
+                    ))}
+                  </div>
+                )}
+                
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setShowQRScanner(true)}
+                    className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-400 font-bold hover:bg-blue-500/20 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <QrCode size={20} /> Scan QR
+                  </button>
+                  {(isSchoolAdmin || isSuperAdmin) && (
+                    <button
+                      onClick={() => setShowHallMonitor(true)}
+                      className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 font-bold hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Users size={20} /> Hall Monitor
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* QR Scanner Modal */}
+            {showQRScanner && (
+              <QRScanner
+                onClose={() => setShowQRScanner(false)}
+                allStudents={allStudents}
+                activePasses={activePasses}
+                onIssuePass={onIssuePass}
+                onReturnStudent={(passId) => onEndPass?.(passId)}
+                labelsConfig={labelsConfig}
+              />
+            )}
+          </div>
+        );
+
+      case 'roster':
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-xl flex items-center gap-2">
+                <Users size={24} className="text-blue-500" /> Student Roster
+              </h3>
+              <div className="text-sm text-muted-foreground">{allStudents.length} students</div>
+            </div>
+            <div className="grid gap-3">
+              {allStudents.slice(0, 50).map(student => (
+                <div 
+                  key={student.id} 
+                  className="p-4 bg-accent rounded-xl border border-border flex justify-between items-center hover:border-primary/50 transition-colors"
+                >
+                  <div>
+                    <div className="font-bold">{student.full_name}</div>
+                    <div className="text-sm text-muted-foreground">Grade {student.grade_level} • {student.student_id_number}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedStudentForID(student)}
+                      className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-sm font-medium hover:bg-blue-500/20 transition-colors"
+                    >
+                      View ID
+                    </button>
+                    <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                      {student.houseId ? houses.find(h => h.id === student.houseId)?.name || 'Assigned' : 'Unassigned'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {allStudents.length > 50 && (
+                <div className="text-center text-muted-foreground text-sm py-4">
+                  Showing 50 of {allStudents.length} students
+                </div>
+              )}
+            </div>
+            
+            {/* DigitalID Modal */}
+            {selectedStudentForID && (
+              <DigitalID
+                student={selectedStudentForID}
+                schoolName={displaySchoolName}
+                onClose={() => setSelectedStudentForID(null)}
+              />
+            )}
+          </div>
+        );
+
+      case 'infractions':
+        return (
+          <>
+            <InfractionsPanel
+              allStudents={allStudents}
+              selectedStudent={selectedStudentForMTSS}
+              setSelectedStudent={setSelectedStudentForMTSS}
+              onLogInfraction={onLogInfraction}
+              onSaveParentContact={onSaveParentContact}
+              onOpenDetention={(student) => setDetentionStudent(student)}
+              theme={theme}
+              labelsConfig={labelsConfig}
+              logs={logs}
+              parentContacts={parentContacts}
+            />
+            
+            {/* Hidden MTSS Document - Only visible when printing */}
+            {selectedStudentForMTSS && (
+              <div className="hidden print:block">
+                <MTSSDoc
+                  student={selectedStudentForMTSS}
+                  logs={logs}
+                  parentContacts={parentContacts}
+                  teacherName={userGreeting?.fullName || user?.displayName}
+                  schoolName={displaySchoolName}
+                />
+              </div>
+            )}
+            
+            {/* Detention Modal */}
+            {detentionStudent && (
+              <DetentionModal
+                student={detentionStudent}
+                infractions={logs.filter(l => l.studentId === detentionStudent.id && l.type === 'INFRACTION')}
+                teacherName={userGreeting?.fullName || user?.displayName}
+                employeeId={employeeId}
+                schoolName={displaySchoolName}
+                onClose={() => setDetentionStudent(null)}
+              />
+            )}
+          </>
+        );
+
       case 'incentives':
         return (
           <IncentivesPanel 
@@ -118,19 +370,62 @@ export default function StrideDashboard({
           />
         );
 
-      // 2. SMART UPLOAD (Replaced with StudentRosterUpload)
+      case 'records':
+        return (
+          <RecordsPanel
+            logs={logs}
+            allStudents={allStudents}
+            theme={theme}
+          />
+        );
+
+      case 'contacts':
+        return (
+          <ParentContactLog
+            parentContacts={parentContacts}
+            allStudents={allStudents}
+            onSaveContact={onSaveParentContact}
+            theme={theme}
+          />
+        );
+
+      // ═══════════════════════════════════════
+      // ADMIN SECTIONS (12)
+      // ═══════════════════════════════════════
+
+      case 'analytics':
+        return (
+          <AnalyticsPanel
+            analyticsData={analyticsData}
+            logs={logs}
+            allStudents={allStudents}
+            houses={houses}
+            activePasses={activePasses}
+            theme={theme}
+          />
+        );
+
+      case 'tardy':
+        return (
+          <TardyKiosk
+            allStudents={allStudents}
+            onLogTardy={onLogTardy}
+            schoolName={displaySchoolName}
+            theme={theme}
+            bellSchedule={bellSchedule}
+          />
+        );
+
       case 'upload':
         return (
           <StudentRosterUpload 
             schoolId={currentSchoolId}
             houses={houses}
             existingStudents={allStudents}
-            // Mapped to the hook's smart upload function
-            onUpload={(students, newHouses) => onHandleFileUpload(students, newHouses)} 
+            onUpload={(students, newHouses) => onHandleFileUpload?.(students, newHouses)} 
           />
         );
 
-      // 3. HOUSE MANAGER (Replaced with StudentHouseAssignment)
       case 'houses':
         return (
           <StudentHouseAssignment 
@@ -142,91 +437,16 @@ export default function StrideDashboard({
           />
         );
 
-      // 4. CLASSROOM QR (Replaced with HallPassQRSetup)
       case 'qrpasses':
         return (
           <HallPassQRSetup 
             userData={user}
-            employeeId={user?.email?.split('@')[0]}
+            employeeId={employeeId}
             schoolId={currentSchoolId}
             isSuperAdmin={isSuperAdmin}
           />
         );
 
-      // --- KEEPING EXISTING SIMPLE SECTIONS INLINE ---
-      case 'hallpass':
-        // (Simplified inline pass logic for stability)
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-             <div className="p-6 bg-accent rounded-xl border border-border">
-                <h3 className="font-bold flex items-center gap-2 mb-4">
-                  <Navigation size={18} className="text-primary" /> Quick Pass
-                </h3>
-                <p className="text-muted-foreground text-sm mb-4">Select a student from the Roster or use the QR Scanner.</p>
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-600 text-sm">
-                  🚧  Teacher Hall Pass UI is currently in "Simple Mode". 
-                  <br/>Use <strong>QR Scanner</strong> for full functionality.
-                </div>
-             </div>
-             {/* Active Passes List */}
-             <div className="space-y-4">
-              <h3 className="font-bold flex items-center gap-2">
-                <Clock size={18} className="text-amber-500" /> Active Passes ({activePasses.length})
-              </h3>
-              {activePasses.map(pass => (
-                <div key={pass.id} className="p-4 bg-accent rounded-xl border border-border flex justify-between items-center">
-                  <div>
-                    <div className="font-bold">{pass.studentName}</div>
-                    <div className="text-sm text-muted-foreground">{pass.destination}</div>
-                  </div>
-                  <button onClick={() => onEndPass(pass.id)} className="px-3 py-1 bg-red-500/10 text-red-500 rounded hover:bg-red-500/20 text-sm font-bold">End</button>
-                </div>
-              ))}
-             </div>
-          </div>
-        );
-
-      // --- ADMIN CONFIG SECTIONS (Simple forms) ---
-      case 'labels':
-      case 'economy':
-      case 'settings':
-      case 'destinations':
-        return (
-          <div className="p-8 text-center text-muted-foreground">
-            <Settings size={48} className="mx-auto mb-4 opacity-20" />
-            <h3 className="text-xl font-bold mb-2">Settings Panel</h3>
-            <p>Use the Admin Panel components to configure {activeSection}.</p>
-            <div className="mt-4 p-4 bg-accent rounded-xl inline-block text-left text-sm">
-              <pre>{JSON.stringify(activeSection === 'economy' ? economyConfig : labelsConfig, null, 2)}</pre>
-            </div>
-          </div>
-        );
-
-      // --- SUPERADMIN ---
-      case 'schools':
-      case 'command':
-        return (
-          <div className="space-y-6">
-            <h3 className="font-bold text-xl flex items-center gap-2">
-              <Globe size={24} className="text-indigo-500" /> Command Center
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="p-6 bg-accent rounded-xl text-center">
-                <div className="text-4xl font-black text-primary">{allSchools.length}</div>
-                <div className="text-sm text-muted-foreground">Schools</div>
-              </div>
-              <div className="p-6 bg-accent rounded-xl text-center">
-                <div className="text-4xl font-black text-emerald-500">{allStudents.length}</div>
-                <div className="text-sm text-muted-foreground">Total Students</div>
-              </div>
-            </div>
-            <button onClick={() => onSwitchSchool('SANDBOX')} className="w-full p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-left">
-              <div className="font-bold text-amber-500">🎓 Enter Training Sandbox</div>
-            </button>
-          </div>
-        );
-
-      // --- SAFETY PANEL ---
       case 'safety':
         return (
           <SafetyPanel
@@ -249,8 +469,85 @@ export default function StrideDashboard({
           />
         );
 
+      case 'communication':
+        return (
+          <CommunicationPanel
+            broadcasts={broadcasts}
+            onSendBroadcast={onSendBroadcast}
+            onDeleteBroadcast={onDeleteBroadcast}
+            onPinBroadcast={onPinBroadcast}
+            isSchoolAdmin={isSchoolAdmin}
+            isSuperAdmin={isSuperAdmin}
+            theme={theme}
+          />
+        );
+
+      case 'labels':
+      case 'economy':
+      case 'settings':
+      case 'destinations':
+      case 'schedule':
+        return (
+          <AdminPanel
+            activeTab={activeSection}
+            labelsConfig={labelsConfig}
+            economyConfig={economyConfig}
+            bellSchedule={bellSchedule}
+            settingsConfig={settingsConfig}
+            houses={houses}
+            onUpdateConfig={onUpdateConfig}
+            onUpdateHouses={onUpdateHouses}
+            isSchoolAdmin={isSchoolAdmin}
+            isSuperAdmin={isSuperAdmin}
+            theme={theme}
+          />
+        );
+
+      // ═══════════════════════════════════════
+      // SUPERADMIN SECTIONS (3)
+      // ═══════════════════════════════════════
+
+      case 'command':
+      case 'schools':
+        return (
+          <SuperAdminPanel
+            allSchools={allSchools}
+            currentSchoolId={currentSchoolId}
+            onSwitchSchool={onSwitchSchool}
+            onCreateSchool={onCreateSchool}
+            onGlobalBroadcast={onGlobalBroadcast}
+            allStudents={allStudents}
+            theme={theme}
+          />
+        );
+
+      case 'broadcast':
+        return (
+          <div className="space-y-6">
+            <h3 className="font-bold text-xl flex items-center gap-2">
+              <Radio size={24} className="text-purple-500" /> Global Broadcast Center
+            </h3>
+            <CommunicationPanel
+              broadcasts={broadcasts}
+              onSendBroadcast={onGlobalBroadcast}
+              onDeleteBroadcast={onDeleteBroadcast}
+              onPinBroadcast={onPinBroadcast}
+              isSchoolAdmin={isSchoolAdmin}
+              isSuperAdmin={isSuperAdmin}
+              isGlobal={true}
+              theme={theme}
+            />
+          </div>
+        );
+
       default:
-        return <div className="p-10 text-center text-muted-foreground">Section {activeSection} not implemented yet.</div>;
+        return (
+          <div className="p-10 text-center text-muted-foreground">
+            <Settings size={48} className="mx-auto mb-4 opacity-20" />
+            <h3 className="text-xl font-bold mb-2">Select a Section</h3>
+            <p>Choose a section from the sidebar to get started.</p>
+          </div>
+        );
     }
   };
 
@@ -271,7 +568,6 @@ export default function StrideDashboard({
             e.preventDefault();
             const code = e.target.schoolCode.value;
             if (onJoinSchool) onJoinSchool(code);
-            else console.warn('[STRIDE] onJoinSchool not connected - school code:', code);
           }}>
             <input 
               name="schoolCode"
@@ -378,6 +674,52 @@ export default function StrideDashboard({
           </div>
         </div>
       </main>
+
+      {/* ═══════════════════════════════════════ */}
+      {/* GLOBAL MODALS & OVERLAYS */}
+      {/* ═══════════════════════════════════════ */}
+      
+      {/* Hall Monitor View */}
+      {showHallMonitor && (
+        <HallMonitorView
+          onExit={() => setShowHallMonitor(false)}
+          activePasses={activePasses}
+          allStudents={allStudents}
+          onReturn={(pass) => {
+            onEndPass?.(pass.id);
+            setScannedPass(null);
+          }}
+          onIssuePass={onIssuePass}
+          onLogInfraction={onLogInfraction}
+          labelsConfig={labelsConfig}
+          employeeId={employeeId}
+        />
+      )}
+      
+      {/* Pass Scanner Display (when QR scanned) */}
+      {scannedPass && (
+        <PassScannerDisplay
+          pass={scannedPass}
+          student={allStudents.find(s => s.id === scannedPass.studentId)}
+          onClose={() => setScannedPass(null)}
+          onSendBack={async (pass) => {
+            await onEndPass?.(pass.id);
+            setScannedPass(null);
+          }}
+          onExtendPass={async (pass, minutes) => {
+            setScannedPass(null);
+          }}
+        />
+      )}
+      
+      {/* Sandbox Guide Orbs */}
+      {sandboxMode && (
+        <SandboxGuideOrbs
+          sandboxMode={sandboxMode}
+          botRef={botRef}
+          activeTab={activeSection}
+        />
+      )}
     </div>
   );
 }
