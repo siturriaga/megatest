@@ -163,8 +163,9 @@ export default function ConsentFlow({
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold mb-2">School Code</label>
+                <label htmlFor="school-code-input" className="block text-sm font-bold mb-2">School Code</label>
                 <input
+                  id="school-code-input"
                   type="text"
                   value={schoolCode}
                   onChange={(e) => {
@@ -174,13 +175,15 @@ export default function ConsentFlow({
                   placeholder="e.g., WESTSIDE_HS or SANDBOX"
                   className="w-full px-4 py-3 bg-accent border border-border rounded-xl font-mono text-lg uppercase"
                   autoFocus
+                  aria-describedby={error ? 'school-code-error' : 'school-code-help'}
+                  aria-invalid={!!error}
                 />
                 {error && (
-                  <p className="text-red-400 text-sm mt-2">{error}</p>
+                  <p id="school-code-error" className="text-red-400 text-sm mt-2" role="alert">{error}</p>
                 )}
               </div>
 
-              <p className="text-xs text-muted-foreground text-center">
+              <p id="school-code-help" className="text-xs text-muted-foreground text-center">
                 Get your school code from your administrator.<br />
                 Type <span className="font-mono font-bold text-primary">SANDBOX</span> to practice with demo data.
               </p>
