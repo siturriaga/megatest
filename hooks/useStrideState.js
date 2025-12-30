@@ -75,7 +75,6 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   // Safety State
   const [lockdown, setLockdown] = useState(false);
   const [lockdownMeta, setLockdownMeta] = useState(null);
-  const [lockdownMeta, setLockdownMeta] = useState(null);
   const [alertLevel, setAlertLevel] = useState('normal');
   const [lockedZones, setLockedZones] = useState([]);
   // Sandbox State
