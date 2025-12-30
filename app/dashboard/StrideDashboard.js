@@ -16,6 +16,7 @@ import IncentivesPanel from './components/IncentivesPanel';
 import HallPassQRSetup from './components/HallPassQRSetup';
 import StudentHouseAssignment from './components/StudentHouseAssignment';
 import SafetyPanel from './components/SafetyPanel';
+import InfractionsPanel from './components/InfractionsPanel';
 // Note: We keep simple sections inline, but swap complex ones for components
 
 /**
@@ -247,6 +248,85 @@ export default function StrideDashboard({
             displaySchoolName={displaySchoolName}
             theme={theme}
           />
+        );
+
+      // --- ROSTER (Student List) ---
+      case 'roster':
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-xl flex items-center gap-2">
+                <Users size={24} className="text-blue-500" /> Student Roster
+              </h3>
+              <div className="text-sm text-muted-foreground">{allStudents.length} students</div>
+            </div>
+            <div className="grid gap-3">
+              {allStudents.slice(0, 50).map(student => (
+                <div key={student.id} className="p-4 bg-accent rounded-xl border border-border flex justify-between items-center">
+                  <div>
+                    <div className="font-bold">{student.full_name}</div>
+                    <div className="text-sm text-muted-foreground">Grade {student.grade_level} • {student.student_id_number}</div>
+                  </div>
+                  <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                    {student.houseId ? houses.find(h => h.id === student.houseId)?.name || 'Assigned' : 'Unassigned'}
+                  </div>
+                </div>
+              ))}
+              {allStudents.length > 50 && (
+                <div className="text-center text-muted-foreground text-sm py-4">
+                  Showing 50 of {allStudents.length} students
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      // --- INFRACTIONS ---
+      case 'infractions':
+        return (
+          <InfractionsPanel
+            allStudents={allStudents}
+            selectedStudent={null}
+            setSelectedStudent={() => {}}
+            onLogInfraction={onLogInfraction}
+            theme={theme}
+            labelsConfig={labelsConfig}
+          />
+        );
+
+      // --- SCHEDULE (Bell Schedule) ---
+      case 'schedule':
+        return (
+          <div className="p-8 text-center text-muted-foreground">
+            <Clock size={48} className="mx-auto mb-4 opacity-20" />
+            <h3 className="text-xl font-bold mb-2">Bell Schedule</h3>
+            <p>Configure bell schedule in Admin Panel.</p>
+            <div className="mt-4 p-4 bg-accent rounded-xl inline-block text-left text-sm">
+              <pre>{JSON.stringify(bellSchedule, null, 2)}</pre>
+            </div>
+          </div>
+        );
+
+      // --- BROADCAST (SuperAdmin) ---
+      case 'broadcast':
+        return (
+          <div className="space-y-6">
+            <h3 className="font-bold text-xl flex items-center gap-2">
+              <Radio size={24} className="text-purple-500" /> Broadcast Center
+            </h3>
+            <div className="p-6 bg-accent rounded-xl border border-border">
+              <textarea 
+                placeholder="Type your broadcast message..."
+                className="w-full p-4 bg-background border border-border rounded-xl mb-4 min-h-[120px]"
+              />
+              <button 
+                onClick={() => onGlobalBroadcast?.('Test broadcast')}
+                className="w-full py-3 bg-purple-500 text-white font-bold rounded-xl hover:bg-purple-600 transition-colors"
+              >
+                Send Broadcast to All Schools
+              </button>
+            </div>
+          </div>
         );
 
       default:
