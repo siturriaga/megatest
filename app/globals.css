@@ -107,8 +107,8 @@ button, a, [role="button"] {
 }
 
 /* ==========================================
-   STRIDE MASCOT & HOUSE ANIMATIONS (NEW)
-   Includes: Phoenix, Wolf, Hawk, Panther, 
+   STRIDE MASCOT & HOUSE ANIMATIONS
+   Consolidated for Phoenix, Wolf, Hawk, Panther, 
    Dragon, Lion, Bear, Tiger, Owl, Shark, Bull, Falcon
    ========================================== */
 
@@ -571,7 +571,7 @@ button, a, [role="button"] {
 }
 
 /* ========================================
-   UTILITIES
+   UTILITIES & QR HELPERS
    ======================================== */
 
 input:focus, select:focus, textarea:focus {
@@ -580,6 +580,14 @@ input:focus, select:focus, textarea:focus {
 
 .btn-press {
   @apply active:scale-95 transition-transform;
+}
+
+/* QR Code Container - Ensures high contrast for scanning even in dark mode */
+.qr-code-container {
+  background-color: white;
+  padding: 1rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 @media print {
