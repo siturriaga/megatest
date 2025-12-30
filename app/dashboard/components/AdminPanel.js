@@ -1,10 +1,7 @@
 'use client';
-import { useState, useRef } from 'react';
-import { X, Upload, Save, Plus, Trash2, Settings, Clock, DollarSign, Home, Tag, Users, FileSpreadsheet, AlertTriangle, Check, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { X, Save, Plus, Trash2, Settings, Clock, DollarSign, Home, Tag, Check, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import * as XLSX from 'xlsx';
-import { processSpreadsheetData } from '../../../utils/columnMatcher';
-import { generateHousesFromGrades, assignHouseByGrade } from '../../../constants/defaults';
 
 export default function AdminPanel({
   onClose,
@@ -24,10 +21,6 @@ export default function AdminPanel({
 }) {
   const [activeTab, setActiveTab] = useState('labels');
   const [isSaving, setIsSaving] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState(null);
-  const [uploadPreview, setUploadPreview] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef(null);
 
   // Local state for editing
   const [localLabels, setLocalLabels] = useState({
@@ -163,108 +156,7 @@ export default function AdminPanel({
     setLocalHouses(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Enhanced file upload with fuzzy column matching
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    setUploadStatus({ type: 'loading', message: 'Processing file...' });
-    setUploadPreview(null);
-
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-      if (jsonData.length === 0) {
-        setUploadStatus({ type: 'error', message: 'No data found in file' });
-        setIsUploading(false);
-        return;
-      }
-
-      // Use fuzzy column matcher
-      const result = processSpreadsheetData(jsonData);
-
-      if (!result.success) {
-        setUploadStatus({ type: 'error', message: result.error });
-        setIsUploading(false);
-        return;
-      }
-
-      // Generate houses from detected grades
-      const newHouses = generateHousesFromGrades(result.grades);
-
-      // Assign each student to their grade's house
-      const studentsWithHouses = result.students.map(student => ({
-        ...student,
-        houseId: assignHouseByGrade(student.grade_level, newHouses),
-      }));
-
-      // Show preview
-      setUploadPreview({
-        students: studentsWithHouses,
-        grades: result.grades,
-        houses: newHouses,
-        stats: result.stats,
-        mappings: result.mappings,
-      });
-
-      setUploadStatus({ 
-        type: 'preview', 
-        message: `Found ${result.stats.processed} students across grades ${result.grades.join(', ')}` 
-      });
-
-    } catch (err) {
-      console.error('File upload error:', err);
-      setUploadStatus({ type: 'error', message: 'Failed to parse file. Ensure it is a valid Excel or CSV file.' });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  // Confirm upload after preview
-  const confirmUpload = async () => {
-    if (!uploadPreview) return;
-
-    setIsUploading(true);
-    setUploadStatus({ type: 'loading', message: 'Uploading students and creating houses...' });
-
-    try {
-      // Update houses first
-      await onUpdateHouses?.(uploadPreview.houses);
-      
-      // Upload students
-      await onHandleFileUpload?.(uploadPreview.students);
-
-      setUploadStatus({ 
-        type: 'success', 
-        message: `Successfully imported ${uploadPreview.stats.processed} students into ${uploadPreview.houses.length} houses` 
-      });
-      setUploadPreview(null);
-
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-
-    } catch (err) {
-      console.error('Upload confirm error:', err);
-      setUploadStatus({ type: 'error', message: 'Failed to upload students' });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const cancelUpload = () => {
-    setUploadPreview(null);
-    setUploadStatus(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
+  // Roster upload logic moved to StudentRosterUpload component
 
   const tabs = [
     { id: 'labels', label: 'Labels', icon: Tag },
@@ -272,7 +164,7 @@ export default function AdminPanel({
     { id: 'economy', label: 'Economy', icon: DollarSign },
     { id: 'houses', label: 'Houses', icon: Home },
     { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'roster', label: 'Roster', icon: Users },
+    // Roster upload moved to dedicated StudentRosterUpload component
   ];
 
   return (
@@ -751,137 +643,8 @@ export default function AdminPanel({
               </motion.button>
             </div>
           )}
-
-          {/* Roster Tab */}
-          {activeTab === 'roster' && (
-            <div className="space-y-6">
-              <div className="p-6 border-2 border-dashed border-border rounded-xl text-center" data-guide="upload-roster">
-                <FileSpreadsheet className="mx-auto mb-4 text-muted-foreground" size={48} />
-                <h3 className="font-bold mb-2">Upload Student Roster</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Upload an Excel (.xlsx) or CSV file. We'll automatically detect columns like:<br />
-                  <strong>Name</strong>, <strong>Student ID</strong>, <strong>Grade</strong> (40+ variations supported)
-                </p>
-                
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="roster-upload"
-                  disabled={isUploading}
-                />
-                <motion.label
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  htmlFor="roster-upload"
-                  className={`inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-xl cursor-pointer hover:opacity-90 transition-opacity ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
-                  {isUploading ? 'Processing...' : 'Select File'}
-                </motion.label>
-
-                {uploadStatus && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`mt-4 p-3 rounded-lg flex items-center justify-center gap-2 ${
-                      uploadStatus.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' :
-                      uploadStatus.type === 'error' ? 'bg-red-500/20 text-red-400' :
-                      uploadStatus.type === 'preview' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-amber-500/20 text-amber-400'
-                    }`}
-                  >
-                    {uploadStatus.type === 'error' && <AlertTriangle size={16} />}
-                    {uploadStatus.type === 'success' && <Check size={16} />}
-                    {uploadStatus.type === 'loading' && <Loader2 size={16} className="animate-spin" />}
-                    {uploadStatus.message}
-                  </motion.div>
-                )}
-              </div>
-
-              {/* Upload Preview */}
-              <AnimatePresence>
-                {uploadPreview && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="p-6 bg-blue-500/10 border border-blue-500/30 rounded-xl"
-                  >
-                    <h4 className="font-bold text-blue-400 mb-4">Upload Preview</h4>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div className="p-3 bg-accent/50 rounded-lg">
-                        <div className="text-2xl font-black text-primary">{uploadPreview.stats.processed}</div>
-                        <div className="text-xs text-muted-foreground">Students to import</div>
-                      </div>
-                      <div className="p-3 bg-accent/50 rounded-lg">
-                        <div className="text-2xl font-black text-emerald-400">{uploadPreview.houses.length}</div>
-                        <div className="text-xs text-muted-foreground">Houses to create</div>
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <div className="text-sm font-bold mb-2">Houses by Grade:</div>
-                      <div className="flex flex-wrap gap-2">
-                        {uploadPreview.houses.map(house => (
-                          <div 
-                            key={house.id}
-                            className="px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2"
-                            style={{ backgroundColor: `${house.color}20`, color: house.color }}
-                          >
-                            {house.mascot} {house.name}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <div className="text-sm font-bold mb-2">Detected Columns:</div>
-                      <div className="text-xs text-muted-foreground">
-                        {Object.entries(uploadPreview.mappings).map(([field, col]) => (
-                          <span key={field} className="inline-block mr-3">
-                            <span className="text-primary">{field}</span> → {col}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={cancelUpload}
-                        disabled={isUploading}
-                        className="flex-1 py-3 bg-accent border border-border rounded-xl font-bold disabled:opacity-50"
-                      >
-                        Cancel
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={confirmUpload}
-                        disabled={isUploading}
-                        className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
-                      >
-                        {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
-                        {isUploading ? 'Uploading...' : 'Confirm Upload'}
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="p-4 bg-accent/50 border border-border rounded-xl">
-                <h4 className="font-bold mb-2">Current Roster</h4>
-                <p className="text-sm text-muted-foreground">
-                  {allStudents?.length || 0} students loaded
-                </p>
-              </div>
-            </div>
-          )}
+          
+          {/* Roster upload available via Smart Upload section in sidebar */}
         </div>
       </motion.div>
     </motion.div>
