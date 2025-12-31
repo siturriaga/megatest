@@ -141,7 +141,9 @@ export default function DashboardPage() {
         onGlobalLockdown={stride.globalLockdown}
         onSaveParentContact={stride.saveParentContact}
         
-        // UI State
+        // UI State - THE BRIDGE (connects useStrideState to StrideDashboard)
+        activeTab={stride.activeTab}
+        onTabChange={stride.setActiveTab}
         theme={stride.theme}
         onThemeChange={stride.setTheme}
         showSchoolPrompt={stride.showSchoolPrompt}
