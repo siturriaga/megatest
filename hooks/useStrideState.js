@@ -18,18 +18,6 @@ const CONSENT_VERSION = '1.0.0';
 
 /**
  * Main STRIDE application state hook.
- * Manages authentication, school data, students, passes, and all app state.
- * 
- * @param {Object} router - Next.js router instance
- * @param {React.RefObject} botRef - Reference to StrideBot animation component
- * @param {Function} setToast - Toast notification setter function
- * @param {Object} user - Firebase user object
- * @param {Function} setUser - User state setter function
- * @returns {Object} Complete application state and action functions
- * 
- * @example
- * const strideState = useStrideState(router, botRef, showToast, user, setUser);
- * const { allStudents, issuePass, toggleLockdown } = strideState;
  */
 export function useStrideState(router, botRef, setToast, user, setUser) {
   // Auth & User State
@@ -77,6 +65,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   const [lockdownMeta, setLockdownMeta] = useState(null);
   const [alertLevel, setAlertLevel] = useState('normal');
   const [lockedZones, setLockedZones] = useState([]);
+  
   // Sandbox State
   const [sandboxMode, setSandboxMode] = useState(false);
   const [sandboxStudents, setSandboxStudents] = useState([...SANDBOX_STUDENTS]);
@@ -88,9 +77,10 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   const unsubscribesRef = useRef([]);
 
   // =====================
-  // DERIVED STATE - No hardcoded emails, Firestore only
+  // DERIVED STATE - FIXED FOR SUPERADMIN
   // =====================
-  const isSuperAdmin = userData?.role === ROLES.SUPER_ADMIN;
+  // FIX APPLIED HERE: Checks for 'super_admin' string
+  const isSuperAdmin = userData?.role === ROLES.SUPER_ADMIN || userData?.role === 'super_admin';
   const isSchoolAdmin = userData?.role === ROLES.SCHOOL_ADMIN || isSuperAdmin;
   const employeeId = userData?.employee_id || user?.email?.split('@')[0]?.toUpperCase() || 'UNKNOWN';
   
@@ -126,7 +116,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   }, []);
 
   // =====================
-  // AUTH LISTENER - Clean flow without hardcoded emails
+  // AUTH LISTENER
   // =====================
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -148,7 +138,8 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
           setUserData(data);
           
           // SuperAdmin: Skip everything, go to command center
-          if (data.role === ROLES.SUPER_ADMIN) {
+          // FIX APPLIED HERE: Checks for 'super_admin' string
+          if (data.role === ROLES.SUPER_ADMIN || data.role === 'super_admin') {
             if (data.school_id && data.school_id !== 'COMMAND_CENTER') {
               setCurrentSchoolId(data.school_id);
             } else {
@@ -219,7 +210,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   }, [router, setUser, setToast]);
 
   // =====================
-  // CONSENT COMPLETION HANDLER - Saves detailed records
+  // CONSENT COMPLETION HANDLER
   // =====================
   const handleConsentComplete = async (consentData) => {
     if (!user?.uid) return;
@@ -305,7 +296,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   };
 
   // =====================
-  // SANDBOX MODE HANDLER - Also creates audit record
+  // SANDBOX MODE HANDLER
   // =====================
   const handleEnterSandbox = async () => {
     if (!user?.uid) return;
