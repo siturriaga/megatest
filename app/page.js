@@ -1,21 +1,51 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, googleProvider } from './firebase';
-import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
-import { Shield, Zap, Users, BarChart3, Lock, ArrowRight } from 'lucide-react';
+import { auth, googleProvider, db } from './firebase';
+import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { Shield, Zap, Users, BarChart3, Lock, ArrowRight, LogOut } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        router.push('/dashboard');
+        setCurrentUser(user);
+        
+        // =====================
+        // CHECK SCHOOL_ID BEFORE REDIRECT
+        // =====================
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            
+            // Only redirect if user has school_id OR is SuperAdmin
+            if (userData.school_id || userData.role === 'super_admin') {
+              router.push('/dashboard');
+              return;
+            }
+          }
+          
+          // No school_id - stay on login page to complete onboarding
+          // They'll see the sign out button and can go through consent flow
+          setLoading(false);
+          
+        } catch (err) {
+          console.error('Error checking user status:', err);
+          setLoading(false);
+        }
+        
       } else {
+        setCurrentUser(null);
         setLoading(false);
       }
     });
@@ -26,8 +56,25 @@ export default function LoginPage() {
     setSigningIn(true);
     setError(null);
     try {
-      await signInWithPopup(auth, googleProvider);
-      router.push('/dashboard');
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      // After sign in, check if user needs onboarding
+      const userRef = doc(db, 'users', result.user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        if (userData.school_id || userData.role === 'super_admin') {
+          router.push('/dashboard');
+        } else {
+          // Needs to complete onboarding - dashboard will show consent/school flow
+          router.push('/dashboard');
+        }
+      } else {
+        // New user - dashboard will show consent flow
+        router.push('/dashboard');
+      }
+      
     } catch (err) {
       console.error('Sign in error:', err);
       if (err.code === 'auth/popup-closed-by-user') {
@@ -47,10 +94,65 @@ export default function LoginPage() {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+      setLoading(false);
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
         <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-white/50 text-sm">Checking authentication...</p>
+        <button 
+          onClick={handleSignOut}
+          className="mt-4 px-4 py-2 text-red-400 text-sm hover:text-red-300 flex items-center gap-2"
+        >
+          <LogOut size={14} />
+          Force Sign Out
+        </button>
+      </div>
+    );
+  }
+
+  // Show "Continue to Dashboard" if user is logged in but needs onboarding
+  if (currentUser) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-6 p-6">
+        <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-blue-500 rounded-2xl flex items-center justify-center font-black text-4xl shadow-lg shadow-emerald-500/30">
+          S
+        </div>
+        <div className="text-center">
+          <h2 className="text-2xl font-black text-white mb-2">Welcome Back!</h2>
+          <p className="text-white/50 text-sm">Signed in as {currentUser.email}</p>
+        </div>
+        
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full py-4 bg-gradient-to-r from-emerald-500 to-blue-500 text-white font-black rounded-2xl flex items-center justify-center gap-3 hover:opacity-90 transition-all shadow-lg"
+          >
+            Continue to Dashboard
+            <ArrowRight size={18} />
+          </button>
+          
+          <button
+            onClick={handleSignOut}
+            className="w-full py-3 bg-red-500/10 text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/20 transition-all"
+          >
+            <LogOut size={16} />
+            Sign Out
+          </button>
+        </div>
+        
+        <p className="text-white/30 text-xs mt-4">
+          You'll need to complete setup if this is your first time.
+        </p>
       </div>
     );
   }
