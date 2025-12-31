@@ -116,6 +116,25 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
   }, []);
 
   // =====================
+  // UI AUTO-SWITCHER (THE FIX)
+  // =====================
+  // This forces the dashboard to switch from 'hallpass' to 'command' 
+  // when you log in as Super Admin.
+  useEffect(() => {
+    if (isSuperAdmin && currentSchoolId === 'COMMAND_CENTER') {
+      setActiveTab('command');
+    }
+  }, [isSuperAdmin, currentSchoolId]);
+
+  /* OPTIONAL: Uncomment to force School Admins to Admin Panel on load
+  useEffect(() => {
+    if (isSchoolAdmin && !isSuperAdmin && activeTab === 'hallpass') {
+       setActiveTab('admin'); 
+    }
+  }, [isSchoolAdmin, isSuperAdmin]);
+  */
+
+  // =====================
   // AUTH LISTENER
   // =====================
   useEffect(() => {
