@@ -167,6 +167,9 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
           
           // Regular user: Check school
           if (data.school_id) {
+            if (data.school_id === 'SANDBOX') {
+              setSandboxMode(true);
+            }
             setCurrentSchoolId(data.school_id);
           } else {
             setShowSchoolPrompt(true);
@@ -242,7 +245,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
         aup_version: CONSENT_VERSION,
         aup_accepted_at: serverTimestamp(),
         camera_consent: true,
-        school_id: consentData.schoolCode === 'SANDBOX' ? null : consentData.schoolCode,
+        school_id: consentData.schoolCode,
         
         // Detailed consent record for audit
         consent_details: consentData.consentDetails || {
@@ -279,7 +282,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
         aup_accepted: true,
         aup_version: CONSENT_VERSION,
         camera_consent: true,
-        school_id: consentData.schoolCode === 'SANDBOX' ? null : consentData.schoolCode,
+        school_id: consentData.schoolCode,
         consent_details: consentData.consentDetails,
       }));
       
@@ -311,13 +314,13 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
       const userRef = doc(db, COLLECTIONS.USERS, user.uid);
       const timestamp = new Date().toISOString();
       
-      // Update consent but don't set school_id
+      // Update consent and set school_id to SANDBOX
       await updateDoc(userRef, {
         aup_accepted: true,
         aup_version: CONSENT_VERSION,
         aup_accepted_at: serverTimestamp(),
         camera_consent: true,
-        // school_id stays null for sandbox
+        school_id: 'SANDBOX',
         consent_details: {
           aup: { accepted: true, timestamp },
           camera: { accepted: true, timestamp },
