@@ -131,7 +131,8 @@ export default function StrideDashboard({
   onSendBroadcast, onDeleteBroadcast, onPinBroadcast,
   onGlobalBroadcast, onGlobalLockdown, onSaveParentContact,
   
-  // UI State
+  // UI State - THE CONNECTION FROM useStrideState
+  activeTab, onTabChange,
   theme, onThemeChange, showSchoolPrompt, onJoinSchool,
   
   // Refs
@@ -143,7 +144,9 @@ export default function StrideDashboard({
   // =====================
   // LOCAL STATE
   // =====================
-  const [activeSection, setActiveSection] = useState('hallpass');
+  // Use activeTab from props (controlled by useStrideState) - NOT local state!
+  const activeSection = activeTab || 'hallpass';
+  
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Modal States
@@ -627,7 +630,7 @@ export default function StrideDashboard({
                 return (
                   <button
                     key={section.id}
-                    onClick={() => setActiveSection(section.id)}
+                    onClick={() => onTabChange?.(section.id)}
                     className={`w-full p-3 rounded-xl mb-1 flex items-center gap-3 transition-all ${
                       isActive ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' : 'hover:bg-accent text-muted-foreground hover:text-foreground'
                     }`}
