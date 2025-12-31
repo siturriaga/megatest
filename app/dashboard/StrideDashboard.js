@@ -129,7 +129,7 @@ export default function StrideDashboard({
   
   // Communication
   onSendBroadcast, onDeleteBroadcast, onPinBroadcast,
-  onGlobalBroadcast, onSaveParentContact,
+  onGlobalBroadcast, onGlobalLockdown, onSaveParentContact,
   
   // UI State
   theme, onThemeChange, showSchoolPrompt, onJoinSchool,
@@ -149,6 +149,8 @@ export default function StrideDashboard({
   // Modal States
   const [selectedStudentForID, setSelectedStudentForID] = useState(null);
   const [selectedStudentForMTSS, setSelectedStudentForMTSS] = useState(null);
+  const [selectedStudentForPass, setSelectedStudentForPass] = useState(null);
+  const [selectedStudentForIncentives, setSelectedStudentForIncentives] = useState(null);
   const [detentionStudent, setDetentionStudent] = useState(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showHallMonitor, setShowHallMonitor] = useState(false);
@@ -192,8 +194,8 @@ export default function StrideDashboard({
               {/* Issue Pass Panel */}
               <HallPassPanel
                 allStudents={allStudents}
-                selectedStudent={null}
-                setSelectedStudent={() => {}}
+                selectedStudent={selectedStudentForPass}
+                setSelectedStudent={setSelectedStudentForPass}
                 onIssuePass={onIssuePass}
                 onReturn={onEndPass}
                 lockdown={lockdown}
@@ -222,7 +224,7 @@ export default function StrideDashboard({
                       <SwipeablePassRow
                         key={pass.id}
                         pass={pass}
-                        onReturn={() => onEndPass?.(pass.id)}
+                        onReturn={() => onEndPass?.(pass)}
                         theme={theme}
                       />
                     ))}
@@ -256,7 +258,7 @@ export default function StrideDashboard({
                 allStudents={allStudents}
                 activePasses={activePasses}
                 onIssuePass={onIssuePass}
-                onReturnStudent={(passId) => onEndPass?.(passId)}
+                onReturnStudent={onEndPass}
                 labelsConfig={labelsConfig}
               />
             )}
@@ -360,6 +362,8 @@ export default function StrideDashboard({
         return (
           <IncentivesPanel 
             allStudents={allStudents}
+            selectedStudent={selectedStudentForIncentives}
+            setSelectedStudent={setSelectedStudentForIncentives}
             houses={houses}
             theme={theme}
             labelsConfig={labelsConfig}
@@ -515,7 +519,8 @@ export default function StrideDashboard({
             currentSchoolId={currentSchoolId}
             onSwitchSchool={onSwitchSchool}
             onCreateSchool={onCreateSchool}
-            onGlobalBroadcast={onGlobalBroadcast}
+            onSendGlobalBroadcast={onGlobalBroadcast}
+            onGlobalLockdown={onGlobalLockdown}
             allStudents={allStudents}
             theme={theme}
           />
@@ -686,7 +691,7 @@ export default function StrideDashboard({
           activePasses={activePasses}
           allStudents={allStudents}
           onReturn={(pass) => {
-            onEndPass?.(pass.id);
+            onEndPass?.(pass);
             setScannedPass(null);
           }}
           onIssuePass={onIssuePass}
@@ -703,7 +708,7 @@ export default function StrideDashboard({
           student={allStudents.find(s => s.id === scannedPass.studentId)}
           onClose={() => setScannedPass(null)}
           onSendBack={async (pass) => {
-            await onEndPass?.(pass.id);
+            await onEndPass?.(pass);
             setScannedPass(null);
           }}
           onExtendPass={async (pass, minutes) => {
