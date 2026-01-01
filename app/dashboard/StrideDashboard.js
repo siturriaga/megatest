@@ -520,6 +520,7 @@ export default function StrideDashboard({
           <SuperAdminPanel
             allSchools={allSchools}
             currentSchoolId={currentSchoolId}
+            displaySchoolName={displaySchoolName}
             onSwitchSchool={onSwitchSchool}
             onCreateSchool={onCreateSchool}
             onSendGlobalBroadcast={onGlobalBroadcast}
