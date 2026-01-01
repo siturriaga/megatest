@@ -373,6 +373,24 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     }
   };
 
+  // Toggle sandbox mode on/off - for SuperAdmin control panel
+  const toggleSandbox = useCallback(async (enable) => {
+    try {
+      if (enable) {
+        setCurrentSchoolId('SANDBOX');
+        setSandboxMode(true);
+        setToast?.({ message: 'Sandbox mode enabled', type: 'success' });
+      } else {
+        setCurrentSchoolId('COMMAND_CENTER');
+        setSandboxMode(false);
+        setToast?.({ message: 'Sandbox mode disabled', type: 'success' });
+      }
+    } catch (error) {
+      console.error('Toggle sandbox error:', error);
+      setToast?.({ message: 'Failed to toggle sandbox mode', type: 'error' });
+    }
+  }, [setToast]);
+
   // Cleanup subscriptions on unmount or school change
   const cleanupSubscriptions = useCallback(() => {
     unsubscribesRef.current.forEach(unsub => unsub?.());
@@ -1649,6 +1667,7 @@ export function useStrideState(router, botRef, setToast, user, setUser) {
     displaySchoolName,
     schoolData,
     sandboxMode,
+    toggleSandbox,
     switchSchool,
     createSchool,
     allSchools,
