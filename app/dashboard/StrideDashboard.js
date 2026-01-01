@@ -55,11 +55,13 @@ import SandboxGuideOrbs from './components/SandboxGuideOrbs';
 
 /**
  * STRIDE Unified Dashboard - FULLY WIRED
- * All 31 components connected
+ * All components connected with merged Command Center
+ * 
+ * @version 2.5.0
  */
 
 // =====================
-// SECTION DEFINITIONS (21 sections)
+// SECTION DEFINITIONS (19 sections - Command Center is single entry for SuperAdmin)
 // =====================
 const SECTIONS = {
   // Teacher (6)
@@ -84,10 +86,8 @@ const SECTIONS = {
   communication: { id: 'communication', label: 'Announcements', icon: Radio, tier: 'admin', group: 'manage' },
   settings: { id: 'settings', label: 'Settings', icon: Settings, tier: 'admin', group: 'config' },
   
-  // SuperAdmin (3)
+  // SuperAdmin (1 - Command Center contains all SuperAdmin features)
   command: { id: 'command', label: 'Command Center', icon: Globe, tier: 'superadmin', group: 'global' },
-  schools: { id: 'schools', label: 'Manage Schools', icon: Building, tier: 'superadmin', group: 'global' },
-  broadcast: { id: 'broadcast', label: 'Global Broadcast', icon: Radio, tier: 'superadmin', group: 'global' },
 };
 
 const SECTION_GROUPS = {
@@ -103,7 +103,7 @@ export default function StrideDashboard({
   
   // School
   currentSchoolId, displaySchoolName, sandboxMode, allSchools,
-  onCreateSchool, onSwitchSchool,
+  onCreateSchool, onSwitchSchool, onDeleteSchool,
   
   // Data Collections
   allStudents = [], houses = [], activePasses = [], logs = [],
@@ -130,6 +130,9 @@ export default function StrideDashboard({
   // Communication
   onSendBroadcast, onDeleteBroadcast, onPinBroadcast,
   onGlobalBroadcast, onGlobalLockdown, onSaveParentContact,
+  
+  // SuperAdmin - Sandbox & School Lockdown
+  onToggleSandbox, onSchoolLockdown,
   
   // UI State - THE CONNECTION FROM useStrideState
   activeTab, onTabChange,
@@ -181,7 +184,7 @@ export default function StrideDashboard({
   }, [visibleSections]);
 
   // =====================
-  // RENDER SECTION CONTENT (21 cases)
+  // RENDER SECTION CONTENT (19 cases)
   // =====================
   const renderSectionContent = () => {
     switch (activeSection) {
@@ -511,42 +514,43 @@ export default function StrideDashboard({
         );
 
       // ═══════════════════════════════════════
-      // SUPERADMIN SECTIONS (3)
+      // SUPERADMIN - COMMAND CENTER (Single Entry Point)
       // ═══════════════════════════════════════
 
       case 'command':
-      case 'schools':
         return (
           <SuperAdminPanel
+            // School data
             allSchools={allSchools}
             currentSchoolId={currentSchoolId}
             displaySchoolName={displaySchoolName}
+            
+            // School actions
             onSwitchSchool={onSwitchSchool}
             onCreateSchool={onCreateSchool}
+            onDeleteSchool={onDeleteSchool}
+            
+            // Broadcast actions
             onSendGlobalBroadcast={onGlobalBroadcast}
+            onSendTargetedBroadcast={onGlobalBroadcast}
+            onSendDirectMessage={onGlobalBroadcast}
+            
+            // Safety actions
             onGlobalLockdown={onGlobalLockdown}
+            onSchoolLockdown={onSchoolLockdown}
+            
+            // Student data
             allStudents={allStudents}
+            
+            // Sandbox
+            sandboxMode={sandboxMode}
+            onToggleSandbox={onToggleSandbox}
+            
+            // System state
+            lockdown={lockdown}
+            alertLevel={alertLevel}
             theme={theme}
           />
-        );
-
-      case 'broadcast':
-        return (
-          <div className="space-y-6">
-            <h3 className="font-bold text-xl flex items-center gap-2">
-              <Radio size={24} className="text-purple-500" /> Global Broadcast Center
-            </h3>
-            <CommunicationPanel
-              broadcasts={broadcasts}
-              onSendBroadcast={onGlobalBroadcast}
-              onDeleteBroadcast={onDeleteBroadcast}
-              onPinBroadcast={onPinBroadcast}
-              isSchoolAdmin={isSchoolAdmin}
-              isSuperAdmin={isSuperAdmin}
-              isGlobal={true}
-              theme={theme}
-            />
-          </div>
         );
 
       default:
