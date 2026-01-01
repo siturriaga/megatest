@@ -1,8 +1,4 @@
 'use client';
-// TEMP: QR disabled for testing build
-const generateBulkStudentQRs = async () => { console.log('QR disabled'); };
-const generatePrintableIDSheet = async () => { console.log('QR disabled'); };
-const downloadBlob = () => {};
 import { useState, useCallback, useMemo } from 'react';
 import { 
   Building2, Plus, QrCode, Download, Printer, ChevronRight, Check, 
@@ -11,7 +7,10 @@ import {
   UserPlus, Crown, School, Activity, Zap, Lock, Unlock, Bell,
   Database, Server, CheckCircle2, XCircle, AlertCircle
 } from 'lucide-react';
-
+// TEMP: QR disabled for testing build
+const generateBulkStudentQRs = async () => { console.log('QR disabled'); };
+const generatePrintableIDSheet = async () => { console.log('QR disabled'); };
+const downloadBlob = () => {};
 /**
  * SuperAdminPanel - Command Center
  * 
