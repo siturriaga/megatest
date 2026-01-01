@@ -86,6 +86,7 @@ export default function DashboardPage() {
         allSchools={stride.allSchools}
         onCreateSchool={stride.createSchool}
         onSwitchSchool={stride.switchSchool}
+        onDeleteSchool={stride.deleteSchool}
         
         // Data Collections
         allStudents={stride.allStudents}
@@ -140,6 +141,10 @@ export default function DashboardPage() {
         onGlobalBroadcast={stride.globalBroadcast}
         onGlobalLockdown={stride.globalLockdown}
         onSaveParentContact={stride.saveParentContact}
+        
+        // SuperAdmin - Sandbox Control
+        onToggleSandbox={stride.toggleSandbox}
+        onSchoolLockdown={stride.schoolLockdown}
         
         // UI State - THE BRIDGE (connects useStrideState to StrideDashboard)
         activeTab={stride.activeTab}
