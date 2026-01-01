@@ -7,24 +7,21 @@ import {
   UserPlus, Crown, School, Activity, Zap, Lock, Unlock, Bell,
   Database, Server, CheckCircle2, XCircle, AlertCircle
 } from 'lucide-react';
-// TEMP: QR disabled for testing build
-const generateBulkStudentQRs = async () => { console.log('QR disabled'); };
-const generatePrintableIDSheet = async () => { console.log('QR disabled'); };
-const downloadBlob = () => {};
+
+// FIXED: Use Industry Standard Alias (@) instead of fragile relative paths
+import { generateBulkStudentQRs, generatePrintableIDSheet, downloadBlob } from '@/utils/qrGenerator';
+
 /**
  * SuperAdminPanel - Command Center
- * 
- * Industry-grade multi-school administration panel.
+ * * Industry-grade multi-school administration panel.
  * Single entry point for all SuperAdmin operations.
- * 
- * Features:
+ * * Features:
  * - School Management: Create, view, switch, delete schools
  * - Broadcast System: Global, targeted, and direct messaging
  * - Safety Controls: Global lockdown, system monitoring
  * - QR Generation: Bulk QR codes, printable ID cards
  * - System Controls: Sandbox mode toggle, user promotion
- * 
- * @version 2.5.0
+ * * @version 2.5.1
  */
 
 // Tab configuration
