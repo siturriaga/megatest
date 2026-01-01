@@ -1,4 +1,8 @@
 'use client';
+// TEMP: QR disabled for testing build
+const generateBulkStudentQRs = async () => { console.log('QR disabled'); };
+const generatePrintableIDSheet = async () => { console.log('QR disabled'); };
+const downloadBlob = () => {};
 import { useState, useCallback, useMemo } from 'react';
 import { 
   Building2, Plus, QrCode, Download, Printer, ChevronRight, Check, 
