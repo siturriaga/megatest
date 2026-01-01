@@ -7,7 +7,6 @@ import {
   UserPlus, Crown, School, Activity, Zap, Lock, Unlock, Bell,
   Database, Server, CheckCircle2, XCircle, AlertCircle
 } from 'lucide-react';
-import { generateBulkStudentQRs, generatePrintableIDSheet, downloadBlob } from '../../../utils/qrGenerator';
 
 /**
  * SuperAdminPanel - Command Center
